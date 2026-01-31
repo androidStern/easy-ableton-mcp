@@ -1,16 +1,15 @@
 [project]
-name = "ableton-mcp-extended"
+name = "easy-ableton-mcp"
 version = "1.0.0"
 description = "Ableton Live integration through the Model Context Protocol with ElevenLabs and extended features"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    {name = "uisato"}
+    {name = "Andrew Stern", email = "andrew.martin.stern@gmail.com"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -20,18 +19,21 @@ dependencies = [
 ]
 
 [project.scripts]
-ableton-mcp-extended = "MCP_Server.server:main"
+easy-ableton-mcp = "MCP_Server.server:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["MCP_Server", "elevenlabs_mcp", "AbletonMCP_UDP"]
+packages = ["MCP_Server", "elevenlabs_mcp", "AbletonMCP_Remote_Script"]
+
+[tool.setuptools.package-data]
+AbletonMCP_Remote_Script = ["*.py"]
 
 [project.urls]
-"Homepage" = "https://github.com/uisato/ableton-mcp-extended"
-"Bug Tracker" = "https://github.com/uisato/ableton-mcp-extended/issues"
+"Homepage" = "https://github.com/androidStern/easy-ableton-mcp"
+"Bug Tracker" = "https://github.com/androidStern/easy-ableton-mcp/issues"
 
 [project.optional-dependencies]
 xy_controller = [

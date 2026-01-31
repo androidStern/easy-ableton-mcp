@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, List, Union
 
+from .protocol import send_message, recv_message
+from .ableton_process import ensure_ableton_running, AbletonTCPNotReadyError, AbletonLaunchError
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -43,137 +46,53 @@ class AbletonConnection:
             finally:
                 self.sock = None
 
-    def receive_full_response(self, sock, buffer_size=8192):
-        """Receive the complete response, potentially in multiple chunks"""
-        chunks = []
-        sock.settimeout(15.0)  # Increased timeout for operations that might take longer
-        
-        try:
-            while True:
-                try:
-                    chunk = sock.recv(buffer_size)
-                    if not chunk:
-                        if not chunks:
-                            raise Exception("Connection closed before receiving any data")
-                        break
-                    
-                    chunks.append(chunk)
-                    
-                    # Check if we've received a complete JSON object
-                    try:
-                        data = b''.join(chunks)
-                        json.loads(data.decode('utf-8'))
-                        logger.info(f"Received complete response ({len(data)} bytes)")
-                        return data
-                    except json.JSONDecodeError:
-                        # Incomplete JSON, continue receiving
-                        continue
-                except socket.timeout:
-                    logger.warning("Socket timeout during chunked receive")
-                    break
-                except (ConnectionError, BrokenPipeError, ConnectionResetError) as e:
-                    logger.error(f"Socket connection error during receive: {str(e)}")
-                    raise
-        except Exception as e:
-            logger.error(f"Error during receive: {str(e)}")
-            raise
-            
-        # If we get here, we either timed out or broke out of the loop
-        if chunks:
-            data = b''.join(chunks)
-            logger.info(f"Returning data after receive completion ({len(data)} bytes)")
-            try:
-                json.loads(data.decode('utf-8'))
-                return data
-            except json.JSONDecodeError:
-                raise Exception("Incomplete JSON response received")
-        else:
-            raise Exception("No data received")
-
     def send_command(self, command_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Send a command to Ableton and return the response"""
+        """Send a command to Ableton and return the response.
+
+        Uses length-prefixed framing for reliable message boundaries.
+        """
         if not self.sock and not self.connect():
             raise ConnectionError("Not connected to Ableton")
-        
+
         command = {
             "type": command_type,
             "params": params or {}
         }
-        
-        # Check if this is a state-modifying command
-        is_modifying_command = command_type in [
-            "create_midi_track", "create_audio_track", "set_track_name",
-            "create_clip", "add_notes_to_clip", "set_clip_name",
-            "set_tempo", "fire_clip", "stop_clip", "set_device_parameter",
-            "start_playback", "stop_playback", "load_instrument_or_effect"
-        ]
-        
+
         try:
             logger.info(f"Sending command: {command_type} with params: {params}")
-            
-            # Send the command
-            self.sock.sendall(json.dumps(command).encode('utf-8'))
-            logger.info(f"Command sent, waiting for response...")
-            
-            # For state-modifying commands, add a small delay to give Ableton time to process
-            if is_modifying_command:
-                import time
-                time.sleep(0.1)  # 100ms delay
-            
-            # Set timeout based on command type
-            timeout = 15.0 if is_modifying_command else 10.0
-            self.sock.settimeout(timeout)
-            
-            # Receive the response
-            response_data = self.receive_full_response(self.sock)
-            logger.info(f"Received {len(response_data)} bytes of data")
-            
-            # Parse the response
-            response = json.loads(response_data.decode('utf-8'))
-            logger.info(f"Response parsed, status: {response.get('status', 'unknown')}")
-            
+
+            # Send the command with length prefix
+            send_message(self.sock, command)
+            logger.info("Command sent, waiting for response...")
+
+            # Receive the response with length prefix
+            response = recv_message(self.sock)
+            logger.info(f"Response received, status: {response.get('status', 'unknown')}")
+
             if response.get("status") == "error":
                 logger.error(f"Ableton error: {response.get('message')}")
                 raise Exception(response.get("message", "Unknown error from Ableton"))
-            
-            # For state-modifying commands, add another small delay after receiving response
-            if is_modifying_command:
-                import time
-                time.sleep(0.1)  # 100ms delay
-            
+
             return response.get("result", {})
-        except socket.timeout:
-            logger.error("Socket timeout while waiting for response from Ableton")
-            self.sock = None
-            raise Exception("Timeout waiting for Ableton response")
-        except (ConnectionError, BrokenPipeError, ConnectionResetError) as e:
+        except ConnectionError as e:
             logger.error(f"Socket connection error: {str(e)}")
             self.sock = None
             raise Exception(f"Connection to Ableton lost: {str(e)}")
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON response from Ableton: {str(e)}")
-            if 'response_data' in locals() and response_data:
-                logger.error(f"Raw response (first 200 bytes): {response_data[:200]}")
             self.sock = None
             raise Exception(f"Invalid response from Ableton: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error communicating with Ableton: {str(e)}")
-            self.sock = None
-            raise Exception(f"Communication error with Ableton: {str(e)}")
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
-    """Manage server startup and shutdown lifecycle"""
+    """Manage server startup and shutdown lifecycle.
+
+    Note: We do NOT connect to Ableton on startup (lazy launch).
+    Ableton will be launched and connected on the first tool call.
+    """
     try:
-        logger.info("AbletonMCP server starting up")
-        
-        try:
-            ableton = get_ableton_connection()
-            logger.info("Successfully connected to Ableton on startup")
-        except Exception as e:
-            logger.warning(f"Could not connect to Ableton on startup: {str(e)}")
-            logger.warning("Make sure the Ableton Remote Script is running")
-        
+        logger.info("AbletonMCP server starting up (Ableton will be launched on first tool call)")
         yield {}
     finally:
         global _ableton_connection
@@ -186,7 +105,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
 # Create the MCP server with lifespan support
 mcp = FastMCP(
     "AbletonMCP",
-    description="Ableton Live integration through the Model Context Protocol",
+    instructions="Ableton Live integration through the Model Context Protocol",
     lifespan=server_lifespan
 )
 
@@ -194,66 +113,67 @@ mcp = FastMCP(
 _ableton_connection = None
 
 def get_ableton_connection():
-    """Get or create a persistent Ableton connection"""
+    """Get or create a persistent Ableton connection.
+
+    Implements lazy launch: if Ableton is not running, it will be launched
+    automatically on the first tool call.
+    """
     global _ableton_connection
-    
-    if _ableton_connection is not None:
+
+    if _ableton_connection is not None and _ableton_connection.sock is not None:
+        return _ableton_connection
+
+    # Connection doesn't exist or socket is dead, create a new one
+    _ableton_connection = None
+
+    # Ensure Ableton is running before attempting to connect (lazy launch)
+    try:
+        was_running = ensure_ableton_running()
+        if was_running:
+            logger.info("Ableton Live is already running")
+        else:
+            logger.info("Launched Ableton Live")
+    except AbletonTCPNotReadyError as e:
+        raise RuntimeError(
+            f"Ableton Live launched but TCP server not ready after {e.timeout}s. "
+            "Make sure the AbletonMCP Remote Script is installed and enabled."
+        )
+    except AbletonLaunchError as e:
+        raise RuntimeError(f"Failed to launch Ableton Live: {e}")
+
+    # Try to connect up to 3 times with a short delay between attempts
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
         try:
-            # Test the connection with a simple ping
-            # We'll try to send an empty message, which should fail if the connection is dead
-            # but won't affect Ableton if it's alive
-            _ableton_connection.sock.settimeout(1.0)
-            _ableton_connection.sock.sendall(b'')
-            return _ableton_connection
-        except Exception as e:
-            logger.warning(f"Existing connection is no longer valid: {str(e)}")
-            try:
-                _ableton_connection.disconnect()
-            except:
-                pass
-            _ableton_connection = None
-    
-    # Connection doesn't exist or is invalid, create a new one
-    if _ableton_connection is None:
-        # Try to connect up to 3 times with a short delay between attempts
-        max_attempts = 3
-        for attempt in range(1, max_attempts + 1):
-            try:
-                logger.info(f"Connecting to Ableton (attempt {attempt}/{max_attempts})...")
-                _ableton_connection = AbletonConnection(host="localhost", port=9877)
-                if _ableton_connection.connect():
-                    logger.info("Created new persistent connection to Ableton")
-                    
-                    # Validate connection with a simple command
-                    try:
-                        # Get session info as a test
-                        _ableton_connection.send_command("get_session_info")
-                        logger.info("Connection validated successfully")
-                        return _ableton_connection
-                    except Exception as e:
-                        logger.error(f"Connection validation failed: {str(e)}")
-                        _ableton_connection.disconnect()
-                        _ableton_connection = None
-                        # Continue to next attempt
-                else:
-                    _ableton_connection = None
-            except Exception as e:
-                logger.error(f"Connection attempt {attempt} failed: {str(e)}")
-                if _ableton_connection:
+            logger.info(f"Connecting to Ableton (attempt {attempt}/{max_attempts})...")
+            _ableton_connection = AbletonConnection(host="localhost", port=9877)
+            if _ableton_connection.connect():
+                logger.info("Created new persistent connection to Ableton")
+
+                # Validate connection with a simple command
+                try:
+                    _ableton_connection.send_command("get_session_info")
+                    logger.info("Connection validated successfully")
+                    return _ableton_connection
+                except Exception as e:
+                    logger.error(f"Connection validation failed: {str(e)}")
                     _ableton_connection.disconnect()
                     _ableton_connection = None
-            
-            # Wait before trying again, but only if we have more attempts left
-            if attempt < max_attempts:
-                import time
-                time.sleep(1.0)
-        
-        # If we get here, all connection attempts failed
-        if _ableton_connection is None:
-            logger.error("Failed to connect to Ableton after multiple attempts")
-            raise Exception("Could not connect to Ableton. Make sure the Remote Script is running.")
-    
-    return _ableton_connection
+            else:
+                _ableton_connection = None
+        except Exception as e:
+            logger.error(f"Connection attempt {attempt} failed: {str(e)}")
+            if _ableton_connection:
+                _ableton_connection.disconnect()
+                _ableton_connection = None
+
+        # Wait before trying again, but only if we have more attempts left
+        if attempt < max_attempts:
+            import time
+            time.sleep(1.0)
+
+    # If we get here, all connection attempts failed
+    raise RuntimeError("Could not connect to Ableton. Make sure the Remote Script is running.")
 
 
 # Core Tool endpoints
@@ -268,6 +188,22 @@ def get_session_info(ctx: Context) -> str:
     except Exception as e:
         logger.error(f"Error getting session info from Ableton: {str(e)}")
         return f"Error getting session info: {str(e)}"
+
+@mcp.tool()
+def get_session_tree(ctx: Context) -> str:
+    """Get a compact tree view of the entire Ableton session.
+
+    Returns all tracks, clips, devices (with nested chains/racks),
+    return tracks, and scenes in a single call. Use this to understand
+    the full session structure before making changes.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_session_tree")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting session tree from Ableton: {str(e)}")
+        return f"Error getting session tree: {str(e)}"
 
 @mcp.tool()
 def get_track_info(ctx: Context, track_index: int) -> str:
@@ -331,9 +267,9 @@ def create_clip(ctx: Context, track_index: int, clip_index: int, length: float =
     """
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("create_clip", {
-            "track_index": track_index, 
-            "clip_index": clip_index, 
+        ableton.send_command("create_clip", {
+            "track_index": track_index,
+            "clip_index": clip_index,
             "length": length
         })
         return f"Created new clip at track {track_index}, slot {clip_index} with length {length} beats"
@@ -358,7 +294,7 @@ def add_notes_to_clip(
     """
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("add_notes_to_clip", {
+        ableton.send_command("add_notes_to_clip", {
             "track_index": track_index,
             "clip_index": clip_index,
             "notes": notes
@@ -380,7 +316,7 @@ def set_clip_name(ctx: Context, track_index: int, clip_index: int, name: str) ->
     """
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("set_clip_name", {
+        ableton.send_command("set_clip_name", {
             "track_index": track_index,
             "clip_index": clip_index,
             "name": name
@@ -400,7 +336,7 @@ def set_tempo(ctx: Context, tempo: float) -> str:
     """
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("set_tempo", {"tempo": tempo})
+        ableton.send_command("set_tempo", {"tempo": tempo})
         return f"Set tempo to {tempo} BPM"
     except Exception as e:
         logger.error(f"Error setting tempo: {str(e)}")
@@ -448,7 +384,7 @@ def fire_clip(ctx: Context, track_index: int, clip_index: int) -> str:
     """
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("fire_clip", {
+        ableton.send_command("fire_clip", {
             "track_index": track_index,
             "clip_index": clip_index
         })
@@ -468,7 +404,7 @@ def stop_clip(ctx: Context, track_index: int, clip_index: int) -> str:
     """
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("stop_clip", {
+        ableton.send_command("stop_clip", {
             "track_index": track_index,
             "clip_index": clip_index
         })
@@ -482,7 +418,7 @@ def start_playback(ctx: Context) -> str:
     """Start playing the Ableton session."""
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("start_playback")
+        ableton.send_command("start_playback")
         return "Started playback"
     except Exception as e:
         logger.error(f"Error starting playback: {str(e)}")
@@ -493,7 +429,7 @@ def stop_playback(ctx: Context) -> str:
     """Stop playing the Ableton session."""
     try:
         ableton = get_ableton_connection()
-        result = ableton.send_command("stop_playback")
+        ableton.send_command("stop_playback")
         return "Stopped playback"
     except Exception as e:
         logger.error(f"Error stopping playback: {str(e)}")
@@ -554,10 +490,10 @@ def get_browser_tree(ctx: Context, category_type: str = "all") -> str:
         error_msg = str(e)
         if "Browser is not available" in error_msg:
             logger.error(f"Browser is not available in Ableton: {error_msg}")
-            return f"Error: The Ableton browser is not available. Make sure Ableton Live is fully loaded and try again."
+            return "Error: The Ableton browser is not available. Make sure Ableton Live is fully loaded and try again."
         elif "Could not access Live application" in error_msg:
             logger.error(f"Could not access Live application: {error_msg}")
-            return f"Error: Could not access the Ableton Live application. Make sure Ableton Live is running and the Remote Script is loaded."
+            return "Error: Could not access the Ableton Live application. Make sure Ableton Live is running and the Remote Script is loaded."
         else:
             logger.error(f"Error getting browser tree: {error_msg}")
             return f"Error getting browser tree: {error_msg}"
@@ -589,10 +525,10 @@ def get_browser_items_at_path(ctx: Context, path: str) -> str:
         error_msg = str(e)
         if "Browser is not available" in error_msg:
             logger.error(f"Browser is not available in Ableton: {error_msg}")
-            return f"Error: The Ableton browser is not available. Make sure Ableton Live is fully loaded and try again."
+            return "Error: The Ableton browser is not available. Make sure Ableton Live is fully loaded and try again."
         elif "Could not access Live application" in error_msg:
             logger.error(f"Could not access Live application: {error_msg}")
-            return f"Error: Could not access the Ableton Live application. Make sure Ableton Live is running and the Remote Script is loaded."
+            return "Error: Could not access the Ableton Live application. Make sure Ableton Live is running and the Remote Script is loaded."
         elif "Unknown or unavailable category" in error_msg:
             logger.error(f"Invalid browser category: {error_msg}")
             return f"Error: {error_msg}. Please check the available categories using get_browser_tree."
@@ -642,7 +578,7 @@ def load_drum_kit(ctx: Context, track_index: int, rack_uri: str, kit_path: str) 
         
         # Step 4: Load the first loadable kit
         kit_uri = loadable_kits[0].get("uri")
-        load_result = ableton.send_command("load_browser_item", {
+        ableton.send_command("load_browser_item", {
             "track_index": track_index,
             "item_uri": kit_uri
         })
@@ -654,8 +590,158 @@ def load_drum_kit(ctx: Context, track_index: int, rack_uri: str, kit_path: str) 
 
 # Main execution
 def main():
-    """Run the MCP server"""
-    mcp.run()
+    """Run the MCP server or perform installation."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Ableton MCP Server")
+    parser.add_argument("--install", action="store_true",
+                        help="Install Remote Script and configure Ableton preferences")
+    parser.add_argument("--uninstall", action="store_true",
+                        help="Remove Remote Script and restore Ableton preferences")
+    args = parser.parse_args()
+
+    if args.uninstall:
+        from .platform import get_platform, get_ableton_paths, AbletonNotFoundError
+        from .installer import uninstall_remote_script
+        from .preferences import PreferencesWriter
+        from .ableton_process import is_ableton_running, ensure_ableton_closed
+        from pathlib import Path
+
+        print("=== Ableton MCP Uninstall ===\n")
+        script_name = "AbletonMCP"
+
+        try:
+            paths = get_ableton_paths()
+
+            # Check if Ableton is running
+            if is_ableton_running():
+                print("Ableton Live is running. It must be closed to modify preferences.")
+                print("Please save your work. Requesting quit...")
+                ensure_ableton_closed(timeout=60)
+                print("Ableton closed.\n")
+
+            # Remove symlink
+            symlink_path = paths.remote_scripts_dir / script_name
+            if symlink_path.exists() or symlink_path.is_symlink():
+                uninstall_remote_script(script_name, paths)
+                print(f"Removed Remote Script symlink: {symlink_path}")
+            else:
+                print(f"Remote Script not installed (no symlink at {symlink_path})")
+
+            # Restore preferences from backup or clear slot
+            prefs_path = paths.find_preferences_cfg()
+            backup_path = prefs_path.with_suffix(".cfg.backup")
+
+            if backup_path.exists():
+                import shutil
+                shutil.copy2(backup_path, prefs_path)
+                print(f"Restored preferences from backup: {backup_path}")
+            else:
+                # No backup - clear the slot manually
+                writer = PreferencesWriter(prefs_path)
+                existing = writer.find_script(script_name)
+                if existing:
+                    writer.clear_control_surface(existing.index, create_backup=False)
+                    print(f"Cleared {script_name} from control surface slot {existing.display_index}")
+                else:
+                    print("No AbletonMCP entry found in preferences")
+
+            print("\n=== Uninstall Complete ===")
+            print("\nAbleton MCP has been removed. You can safely delete the source code if desired.")
+            return 0
+
+        except AbletonNotFoundError as e:
+            print(f"\nERROR: {e}")
+            return 1
+        except Exception as e:
+            print(f"\nERROR: {e}")
+            return 1
+
+    elif args.install:
+        # Import here to avoid circular imports and keep server startup fast
+        from .platform import get_platform, get_ableton_paths, AbletonNotFoundError
+        from .installer import install_remote_script
+        from .preferences import PreferencesWriter, NoEmptySlotError
+        from .ableton_process import is_ableton_running, ensure_ableton_closed
+        from pathlib import Path
+
+        print("=== Ableton MCP Installation ===\n")
+
+        # Find the Remote Script source
+        # Try multiple locations: installed package, or dev repo
+        import importlib.util
+        script_name = "AbletonMCP"
+
+        # Option 1: Check if AbletonMCP_Remote_Script is an installed package
+        spec = importlib.util.find_spec("AbletonMCP_Remote_Script")
+        if spec and spec.submodule_search_locations:
+            script_source = Path(spec.submodule_search_locations[0])
+        else:
+            # Option 2: Development - relative to this file
+            script_source = Path(__file__).parent.parent / "AbletonMCP_Remote_Script"
+
+        if not script_source.exists():
+            print(f"ERROR: Remote Script not found at {script_source}")
+            return 1
+
+        # Verify it has __init__.py
+        if not (script_source / "__init__.py").exists():
+            print(f"ERROR: Remote Script missing __init__.py at {script_source}")
+            return 1
+
+        try:
+            paths = get_ableton_paths()
+            print(f"Platform: {get_platform().name}")
+            print(f"Remote Scripts: {paths.remote_scripts_dir}")
+
+            # Check if Ableton is running
+            if is_ableton_running():
+                print("\nAbleton Live is running. It must be closed to modify preferences.")
+                print("Please save your work. Requesting quit...")
+                ensure_ableton_closed(timeout=60)
+                print("Ableton closed.")
+
+            # Install symlink
+            print(f"\nInstalling Remote Script '{script_name}'...")
+            install_remote_script(script_source, script_name, paths, force=True)
+            print(f"  -> Symlinked to {paths.remote_scripts_dir / script_name}")
+
+            # Configure preferences
+            print("\nConfiguring Ableton preferences...")
+            prefs_path = paths.find_preferences_cfg()
+            writer = PreferencesWriter(prefs_path)
+
+            # Check if already configured
+            existing = writer.find_script(script_name)
+            if existing:
+                print(f"  -> Already configured in slot {existing.display_index}")
+            else:
+                slot = writer.set_control_surface(script_name)
+                print(f"  -> Configured in slot {slot + 1}")
+                print(f"  -> Backup saved to {prefs_path}.backup")
+
+            print("\n=== Installation Complete ===")
+            print("\nNext steps:")
+            print("1. Start Ableton Live")
+            print("2. The MCP server will auto-launch Ableton when needed")
+            print("\nTo run the server:")
+            print("  uvx easy-ableton-mcp")
+            return 0
+
+        except AbletonNotFoundError as e:
+            print(f"\nERROR: {e}")
+            print("Make sure Ableton Live is installed and has been run at least once.")
+            return 1
+        except NoEmptySlotError:
+            print("\nERROR: All 7 control surface slots are in use.")
+            print("Please free up a slot in Ableton's preferences.")
+            return 1
+        except Exception as e:
+            print(f"\nERROR: {e}")
+            return 1
+    else:
+        # Normal server mode
+        mcp.run()
 
 if __name__ == "__main__":
     main()

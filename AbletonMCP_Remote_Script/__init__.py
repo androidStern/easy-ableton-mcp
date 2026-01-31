@@ -4,6 +4,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 from _Framework.ControlSurface import ControlSurface
 import socket
 import json
+import struct
 import threading
 import time
 import traceback
@@ -17,6 +18,34 @@ except ImportError:
 # Constants for socket communication
 DEFAULT_PORT = 9877
 HOST = "localhost"
+
+
+# Length-prefixed protocol functions
+# Protocol: 4-byte big-endian length prefix + UTF-8 JSON payload
+
+def send_message(sock, data):
+    """Send a length-prefixed JSON message over the socket."""
+    msg = json.dumps(data).encode('utf-8')
+    sock.sendall(struct.pack('>I', len(msg)) + msg)
+
+
+def recv_exact(sock, n):
+    """Receive exactly n bytes from the socket."""
+    data = b''
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            raise Exception("Socket closed")
+        data += chunk
+    return data
+
+
+def recv_message(sock):
+    """Receive a length-prefixed JSON message from the socket."""
+    length_bytes = recv_exact(sock, 4)
+    length = struct.unpack('>I', length_bytes)[0]
+    data = recv_exact(sock, length)
+    return json.loads(data.decode('utf-8'))
 
 def create_instance(c_instance):
     """Create and return the AbletonMCP script instance"""
@@ -131,72 +160,42 @@ class AbletonMCP(ControlSurface):
             self.log_message("Server thread error: " + str(e))
     
     def _handle_client(self, client):
-        """Handle communication with a connected client"""
+        """Handle communication with a connected client using length-prefixed protocol."""
         self.log_message("Client handler started")
         client.settimeout(None)  # No timeout for client socket
-        buffer = ''  # Changed from b'' to '' for Python 2
-        
+
         try:
             while self.running:
                 try:
-                    # Receive data
-                    data = client.recv(8192)
-                    
-                    if not data:
-                        # Client disconnected
+                    # Receive length-prefixed message
+                    command = recv_message(client)
+
+                    self.log_message("Received command: " + str(command.get("type", "unknown")))
+
+                    # Process the command and get response
+                    response = self._process_command(command)
+
+                    # Send length-prefixed response
+                    send_message(client, response)
+
+                except Exception as e:
+                    error_msg = str(e)
+                    if error_msg == "Socket closed":
                         self.log_message("Client disconnected")
                         break
-                    
-                    # Accumulate data in buffer with explicit encoding/decoding
-                    try:
-                        # Python 3: data is bytes, decode to string
-                        buffer += data.decode('utf-8')
-                    except AttributeError:
-                        # Python 2: data is already string
-                        buffer += data
-                    
-                    try:
-                        # Try to parse command from buffer
-                        command = json.loads(buffer)  # Removed decode('utf-8')
-                        buffer = ''  # Clear buffer after successful parse
-                        
-                        self.log_message("Received command: " + str(command.get("type", "unknown")))
-                        
-                        # Process the command and get response
-                        response = self._process_command(command)
-                        
-                        # Send the response with explicit encoding
-                        try:
-                            # Python 3: encode string to bytes
-                            client.sendall(json.dumps(response).encode('utf-8'))
-                        except AttributeError:
-                            # Python 2: string is already bytes
-                            client.sendall(json.dumps(response))
-                    except ValueError:
-                        # Incomplete data, wait for more
-                        continue
-                        
-                except Exception as e:
-                    self.log_message("Error handling client data: " + str(e))
+
+                    self.log_message("Error handling client data: " + error_msg)
                     self.log_message(traceback.format_exc())
-                    
+
                     # Send error response if possible
                     error_response = {
                         "status": "error",
-                        "message": str(e)
+                        "message": error_msg
                     }
                     try:
-                        # Python 3: encode string to bytes
-                        client.sendall(json.dumps(error_response).encode('utf-8'))
-                    except AttributeError:
-                        # Python 2: string is already bytes
-                        client.sendall(json.dumps(error_response))
+                        send_message(client, error_response)
                     except:
                         # If we can't send the error, the connection is probably dead
-                        break
-                    
-                    # For serious errors, break the loop
-                    if not isinstance(e, ValueError):
                         break
         except Exception as e:
             self.log_message("Error in client handler: " + str(e))
@@ -326,6 +325,8 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_browser_items_at_path":
                 path = params.get("path", "")
                 response["result"] = self.get_browser_items_at_path(path)
+            elif command_type == "get_session_tree":
+                response["result"] = self.get_session_tree()
             else:
                 response["status"] = "error"
                 response["message"] = "Unknown command: " + command_type
@@ -819,6 +820,112 @@ class AbletonMCP(ControlSurface):
                 return "unknown"
         except:
             return "unknown"
+
+    def _get_device_tree(self, device):
+        """Recursively build device tree including chains and drum pads."""
+        try:
+            node = {
+                "name": device.name,
+                "type": device.class_name
+            }
+
+            # Rack with chains (Instrument Rack, Audio Effect Rack, etc.)
+            if device.can_have_chains and hasattr(device, 'chains') and device.chains:
+                node["chains"] = []
+                for chain in device.chains:
+                    chain_node = {
+                        "name": chain.name,
+                        "devices": [self._get_device_tree(d) for d in chain.devices]
+                    }
+                    node["chains"].append(chain_node)
+
+            # Drum Rack with pads
+            if device.can_have_drum_pads and hasattr(device, 'drum_pads'):
+                # Only include pads that have chains (i.e., have content)
+                filled_pads = []
+                for pad in device.drum_pads:
+                    if hasattr(pad, 'chains') and pad.chains:
+                        pad_node = {
+                            "note": pad.note,
+                            "name": pad.name,
+                            "devices": []
+                        }
+                        for chain in pad.chains:
+                            for d in chain.devices:
+                                pad_node["devices"].append(self._get_device_tree(d))
+                        if pad_node["devices"]:
+                            filled_pads.append(pad_node)
+                if filled_pads:
+                    node["pads"] = filled_pads
+
+            return node
+        except Exception as e:
+            self.log_message("Error in _get_device_tree: " + str(e))
+            return {"name": device.name, "type": "error", "error": str(e)}
+
+    def get_session_tree(self):
+        """Get a compact tree view of the entire session."""
+        try:
+            tree = {
+                "tempo": self._song.tempo,
+                "signature": "{0}/{1}".format(
+                    self._song.signature_numerator,
+                    self._song.signature_denominator
+                ),
+                "tracks": [],
+                "returns": [],
+                "scenes": []
+            }
+
+            # Tracks
+            for i, track in enumerate(self._song.tracks):
+                track_node = {
+                    "id": i,
+                    "name": track.name,
+                    "type": "midi" if track.has_midi_input else "audio",
+                    "mute": track.mute,
+                    "solo": track.solo,
+                    "arm": track.arm,
+                    "clips": [],
+                    "devices": []
+                }
+
+                # Clips (only those that exist)
+                for j, slot in enumerate(track.clip_slots):
+                    if slot.has_clip:
+                        track_node["clips"].append({
+                            "id": j,
+                            "name": slot.clip.name,
+                            "length": slot.clip.length
+                        })
+
+                # Devices (recursive)
+                for device in track.devices:
+                    track_node["devices"].append(self._get_device_tree(device))
+
+                tree["tracks"].append(track_node)
+
+            # Return tracks
+            for i, ret in enumerate(self._song.return_tracks):
+                ret_node = {
+                    "id": i,
+                    "name": ret.name,
+                    "devices": [self._get_device_tree(d) for d in ret.devices]
+                }
+                tree["returns"].append(ret_node)
+
+            # Scenes
+            for i, scene in enumerate(self._song.scenes):
+                tree["scenes"].append({
+                    "id": i,
+                    "name": scene.name
+                })
+
+            return tree
+        except Exception as e:
+            self.log_message("Error in get_session_tree: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
     
     def get_browser_tree(self, category_type="all"):
         """

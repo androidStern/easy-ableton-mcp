@@ -28,8 +28,8 @@ First, clone the repository and install the required Python package.
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [https://github.com/uisato/ableton-mcp-extended.git](https://github.com/uisato/ableton-mcp-extended.git)
-    cd ableton-mcp-extended
+    git clone [https://github.com/androidStern/easy-ableton-mcp.git](https://github.com/androidStern/easy-ableton-mcp.git)
+    cd easy-ableton-mcp
     ```
 
 2.  **Install the Package:**
@@ -124,26 +124,26 @@ Choose your preferred AI assistant:
     "AbletonMCP": {
       "command": "python",
       "args": [
-        "C:\\path\\to\\ableton-mcp-extended\\MCP_Server\\server.py"
+        "C:\\path\\to\\easy-ableton-mcp\\MCP_Server\\server.py"
       ]
     }
   }
 }
 ```
 
-5. **Update the path:** Replace `C:\\path\\to\\ableton-mcp-extended` with your actual installation path
+5. **Update the path:** Replace `C:\\path\\to\\easy-ableton-mcp` with your actual installation path
 6. **Save** and **restart Claude Desktop**
 
 #### 🔍 Finding Your Installation Path
 **Windows:**
 ```bash
-# In your ableton-mcp-extended folder, run:
+# In your easy-ableton-mcp folder, run:
 echo %CD%\MCP_Server\server.py
 ```
 
 **macOS:**
 ```bash
-# In your ableton-mcp-extended folder, run:
+# In your easy-ableton-mcp folder, run:
 echo $PWD/MCP_Server/server.py
 ```
 
@@ -160,7 +160,7 @@ echo $PWD/MCP_Server/server.py
     "AbletonMCP": {
       "command": "python",
       "args": [
-        "C:/path/to/ableton-mcp-extended/MCP_Server/server.py"
+        "C:/path/to/easy-ableton-mcp/MCP_Server/server.py"
       ]
     }
   }
@@ -360,8 +360,8 @@ python -c "import socket; s = socket.socket(); s.connect(('localhost', 9877)); p
 
 ## 💬 Need Help?
 
-- **🐛 Found a bug?** [Open an issue](https://github.com/uisato/ableton-mcp-extended/issues)
-- **❓ Have questions?** [Join discussions](https://github.com/uisato/ableton-mcp-extended/discussions)
+- **🐛 Found a bug?** [Open an issue](https://github.com/androidStern/easy-ableton-mcp/issues)
+- **❓ Have questions?** [Join discussions](https://github.com/androidStern/easy-ableton-mcp/discussions)
 
 ---
 

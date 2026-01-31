@@ -1,9 +1,11 @@
-# Ableton MCP Extended
-**Control Ableton Live using natural language via AI assistants like Claude or Cursor. This project provides a robust Model Context Protocol (MCP) server that translates natural language commands into precise actions within your Ableton Live session.**
+# Easy Ableton MCP
+**Control Ableton Live using natural language via AI assistants like Claude or Cursor. Zero-config installation - just run one command.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Ableton Live 11+](https://img.shields.io/badge/Ableton%20Live-11+-orange.svg)](https://www.ableton.com/)
+
+> **Fork Notice:** This is a fork of [uisato's ableton-mcp-extended](https://github.com/uisato/ableton-mcp-extended). I shamelessly stole most of his code and added automatic installation, a simplified TCP protocol, and lazy Ableton launching. All credit for the core MCP server and Remote Script goes to uisato.
 
 ---
 
@@ -81,8 +83,8 @@ This project provides comprehensive, programmatic control over the Ableton Live 
 
 ### 1. **Get the Code**
 ```bash
-git clone https://github.com/uisato/ableton-mcp-extended.git
-cd ableton-mcp-extended
+git clone https://github.com/androidStern/easy-ableton-mcp.git
+cd easy-ableton-mcp
 pip install -e .
 ```
 
@@ -107,7 +109,7 @@ pip install -e .
   "mcpServers": {
     "AbletonMCP": {
       "command": "python",
-      "args": ["C:/path/to/ableton-mcp-extended/MCP_Server/server.py"]
+      "args": ["C:/path/to/easy-ableton-mcp/MCP_Server/server.py"]
     }
   }
 }
@@ -186,7 +188,7 @@ Example mcp-config.json:
   "mcpServers": {
     "AbletonMCP": {
       "command": "python",
-      "args": ["/path/to/ableton-mcp-extended/server.py"]
+      "args": ["/path/to/easy-ableton-mcp/server.py"]
     },
     "ElevenLabs": {
       "command": "python",

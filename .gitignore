@@ -35,6 +35,9 @@ Thumbs.db
 *.tmp
 *.log
 
+# Local MCP config (contains machine-specific paths)
+.mcp.json
+
 # Ableton-specific
 *.als
 *.alc
