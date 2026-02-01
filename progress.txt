@@ -54,34 +54,53 @@
 
 ---
 
-## IN PROGRESS: CODE_REVIEW.md Issue #2 - Monolithic _process_command()
+## COMPLETED: CODE_REVIEW.md Issue #2 - Monolithic _process_command()
 
 ### Problem
-`_process_command()` is 149 lines with 25+ elif branches and duplicated dispatch logic.
+`_process_command()` was 149 lines with 25+ elif branches and duplicated dispatch logic.
 
-### Solution Chosen
-Decorator-based command registry (Flask/FastAPI pattern). Evaluated via 4 background agents:
-- 3/4 recommended structured dispatch over if-elif
-- Decorator registry chosen for colocation + TypeScript portability
+### Solution
+Decorator-based command registry (Flask/FastAPI pattern):
+- `CommandRegistry` class at module level with `@commands.register()` decorator
+- `_execute_on_main_thread()` method encapsulates queue-based scheduling
+- Simplified `_process_command()` reduced from 149 lines to 20 lines
 
-### Work Completed
-1. **Test suite created** - `tests/test_command_dispatch.py` + `tests/conftest.py`
-   - 42 tests passing in 0.11s
-   - Covers all 19 commands (6 direct, 13 main-thread)
-   - Tests queue timeout behavior and error propagation
-   - Mocks only at Ableton API boundary (_song, application, ControlSurface)
+### Changes Made
+1. **Added CommandRegistry class** (lines 23-53)
+   - `register(name, main_thread=False)` decorator
+   - `is_registered()`, `get_handler_name()`, `requires_main_thread()` methods
 
-2. **Refactor plan written** - `REFACTOR_PLAN.md`
-   - CommandRegistry class design
-   - Handler signature updates (add defaults)
-   - _execute_on_main_thread() extraction
-   - Simplified _process_command() implementation
-   - Migration checklist
+2. **Added _execute_on_main_thread() method** (lines 241-261)
+   - Encapsulates queue-based main thread scheduling
+   - Handles AssertionError for already-on-main-thread case
+   - Returns timeout error after 10s
 
-### Next Steps
-1. Add CommandRegistry class at module level
-2. Add _execute_on_main_thread() method
-3. Update handler signatures with defaults
-4. Add @commands.register() decorators
-5. Replace _process_command() with simplified version
-6. Run tests - verify 42 pass
+3. **Updated all handlers with decorators and defaults**
+   - 6 direct commands: get_session_info, get_track_info, get_browser_tree,
+     get_browser_items_at_path, get_session_tree, get_device_parameters
+   - 13 main-thread commands: create_midi_track, set_track_name, create_clip,
+     add_notes_to_clip, set_clip_name, set_tempo, fire_clip, stop_clip,
+     start_playback, stop_playback, load_browser_item, set_device_parameter,
+     batch_set_device_parameters
+   - Added get_browser_item (direct) for completeness
+
+4. **Replaced _process_command()** (lines 263-282)
+   - Uses registry for dispatch instead of if-elif chain
+   - Single code path for both direct and main-thread commands
+
+### Dead Code Removed
+- `load_instrument_or_effect` reference (handler never existed)
+- `get_browser_categories` and `get_browser_items` references (handlers never existed)
+
+### Test Results
+- 42 unit tests passing in 0.10s
+- All direct commands return success and skip schedule_message
+- All main-thread commands return success and use schedule_message
+- Queue timeout and error propagation verified
+
+### Live Verification (Ableton + MCP)
+Ran `./scripts/dev-refresh.sh --test` with real Ableton:
+- get_session_info: PASS (Tempo: 128 BPM, 4 tracks)
+- get_device_parameters: PASS (Drift synth, 66 parameters)
+- set_device_parameter: PASS (LP Freq = 0.5)
+- batch_set_device_parameters: PASS (updated parameters)
