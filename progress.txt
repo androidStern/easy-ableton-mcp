@@ -143,6 +143,40 @@ Added `@ableton_command()` decorator that handles connection, command dispatch, 
 
 ---
 
+## COMPLETED: CODE_REVIEW.md Issue #4 - Silent Default Parameters
+
+### Problem
+Commands silently accepted missing required parameters by defaulting to 0/"":
+- `track_index=0` meant forgetting the param affected track 0
+- `clip_index=0` meant forgetting the param affected clip 0
+- No way to distinguish "passed 0" from "forgot parameter"
+
+### Solution
+TDD approach:
+1. Wrote 25 failing tests first (test_required_params.py)
+2. Added `_require_param(name, value)` helper method
+3. Changed defaults from `0`/`""` to `None`
+4. Added validation at start of each handler
+
+### Handlers Updated
+- _get_track_info: track_index
+- _set_track_name: track_index
+- _create_clip: track_index, clip_index
+- _add_notes_to_clip: track_index, clip_index
+- _set_clip_name: track_index, clip_index
+- _fire_clip: track_index, clip_index
+- _stop_clip: track_index, clip_index
+- _load_browser_item: track_index, item_uri
+- _get_device_parameters: track_index, device_index
+- _set_device_parameter: track_index, device_index, parameter_index, value
+- _batch_set_device_parameters: track_index, device_index
+
+### Test Results
+- 67 tests passing (42 existing + 25 new)
+- Explicit zero values still work (TestExplicitZeroStillWorks)
+
+---
+
 ## COMPLETED: Crash Recovery Dialog Fix
 
 ### Problem

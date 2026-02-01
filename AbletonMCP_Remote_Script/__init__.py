@@ -260,6 +260,12 @@ class AbletonMCP(ControlSurface):
         except queue.Empty:
             return {"status": "error", "message": "Timeout waiting for operation to complete"}
 
+    def _require_param(self, name, value):
+        """Validate that a required parameter was provided (not None)."""
+        if value is None:
+            raise ValueError("Missing required parameter: " + name)
+        return value
+
     def _process_command(self, command):
         """Process a command from the client using the command registry."""
         command_type = command.get("type", "")
@@ -305,9 +311,10 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("get_track_info")
-    def _get_track_info(self, track_index=0):
+    def _get_track_info(self, track_index=None):
         """Get information about a track"""
         try:
+            track_index = self._require_param("track_index", track_index)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             
@@ -382,9 +389,10 @@ class AbletonMCP(ControlSurface):
     
     
     @commands.register("set_track_name", main_thread=True)
-    def _set_track_name(self, track_index=0, name=""):
+    def _set_track_name(self, track_index=None, name=""):
         """Set the name of a track"""
         try:
+            track_index = self._require_param("track_index", track_index)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             
@@ -401,9 +409,11 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("create_clip", main_thread=True)
-    def _create_clip(self, track_index=0, clip_index=0, length=4.0):
+    def _create_clip(self, track_index=None, clip_index=None, length=4.0):
         """Create a new MIDI clip in the specified track and clip slot"""
         try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             
@@ -431,11 +441,13 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("add_notes_to_clip", main_thread=True)
-    def _add_notes_to_clip(self, track_index=0, clip_index=0, notes=None):
+    def _add_notes_to_clip(self, track_index=None, clip_index=None, notes=None):
         """Add MIDI notes to a clip"""
         if notes is None:
             notes = []
         try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
 
@@ -474,9 +486,11 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("set_clip_name", main_thread=True)
-    def _set_clip_name(self, track_index=0, clip_index=0, name=""):
+    def _set_clip_name(self, track_index=None, clip_index=None, name=""):
         """Set the name of a clip"""
         try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             
@@ -516,9 +530,11 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("fire_clip", main_thread=True)
-    def _fire_clip(self, track_index=0, clip_index=0):
+    def _fire_clip(self, track_index=None, clip_index=None):
         """Fire a clip"""
         try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             
@@ -543,9 +559,11 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("stop_clip", main_thread=True)
-    def _stop_clip(self, track_index=0, clip_index=0):
+    def _stop_clip(self, track_index=None, clip_index=None):
         """Stop a clip"""
         try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             
@@ -683,9 +701,11 @@ class AbletonMCP(ControlSurface):
     
     
     @commands.register("load_browser_item", main_thread=True)
-    def _load_browser_item(self, track_index=0, item_uri=""):
+    def _load_browser_item(self, track_index=None, item_uri=None):
         """Load a browser item onto a track by its URI"""
         try:
+            track_index = self._require_param("track_index", track_index)
+            item_uri = self._require_param("item_uri", item_uri)
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             
@@ -762,7 +782,7 @@ class AbletonMCP(ControlSurface):
     # Device parameter control methods
 
     @commands.register("get_device_parameters")
-    def _get_device_parameters(self, track_index=0, device_index=0, device_path=None):
+    def _get_device_parameters(self, track_index=None, device_index=None, device_path=None):
         """
         Get all parameters for a device.
 
@@ -775,6 +795,8 @@ class AbletonMCP(ControlSurface):
             Dictionary with device info and parameters list
         """
         try:
+            track_index = self._require_param("track_index", track_index)
+            device_index = self._require_param("device_index", device_index)
             device = self._resolve_device(track_index, device_index, device_path)
             track = self._song.tracks[track_index]
 
@@ -808,7 +830,7 @@ class AbletonMCP(ControlSurface):
             raise
 
     @commands.register("set_device_parameter", main_thread=True)
-    def _set_device_parameter(self, track_index=0, device_index=0, parameter_index=0, value=0.0, device_path=None):
+    def _set_device_parameter(self, track_index=None, device_index=None, parameter_index=None, value=None, device_path=None):
         """
         Set a device parameter to a normalized value (0.0-1.0).
 
@@ -823,6 +845,10 @@ class AbletonMCP(ControlSurface):
             Dictionary with the updated parameter info
         """
         try:
+            track_index = self._require_param("track_index", track_index)
+            device_index = self._require_param("device_index", device_index)
+            parameter_index = self._require_param("parameter_index", parameter_index)
+            value = self._require_param("value", value)
             device = self._resolve_device(track_index, device_index, device_path)
 
             if parameter_index < 0 or parameter_index >= len(device.parameters):
@@ -848,7 +874,7 @@ class AbletonMCP(ControlSurface):
             raise
 
     @commands.register("batch_set_device_parameters", main_thread=True)
-    def _batch_set_device_parameters(self, track_index=0, device_index=0, parameters=None, device_path=None):
+    def _batch_set_device_parameters(self, track_index=None, device_index=None, parameters=None, device_path=None):
         """
         Set multiple device parameters atomically.
 
@@ -864,6 +890,8 @@ class AbletonMCP(ControlSurface):
         if parameters is None:
             parameters = []
         try:
+            track_index = self._require_param("track_index", track_index)
+            device_index = self._require_param("device_index", device_index)
             device = self._resolve_device(track_index, device_index, device_path)
 
             updated_params_info = []
