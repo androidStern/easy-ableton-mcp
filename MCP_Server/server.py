@@ -340,8 +340,7 @@ def create_clip(ctx: Context, track_index: int, clip_index: int, length: float =
 
 
 @mcp.tool()
-@ableton_command("add_notes_to_clip",
-                 format_result=lambda r, p: f"Added {len(p.get('notes', []))} notes to clip at track {p['track_index']}, slot {p['clip_index']}")
+@ableton_command("add_notes_to_clip")
 def add_notes_to_clip(
     ctx: Context,
     track_index: int,
@@ -357,6 +356,91 @@ def add_notes_to_clip(
     - notes: List of note dictionaries, each with pitch, start_time, duration, velocity, and mute
     """
     return {"track_index": track_index, "clip_index": clip_index, "notes": notes}
+
+
+@mcp.tool()
+@ableton_command("get_notes_from_clip")
+def get_notes_from_clip(ctx: Context, track_index: int, clip_index: int) -> str:
+    """
+    Get all MIDI notes from a clip with their IDs.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+
+    Returns JSON with notes array, each note having:
+    note_id, pitch, start_time, duration, velocity, mute, probability
+    """
+    return {"track_index": track_index, "clip_index": clip_index}
+
+
+@mcp.tool()
+@ableton_command("delete_notes_from_clip")
+def delete_notes_from_clip(ctx: Context, track_index: int, clip_index: int,
+                           note_ids: List[int]) -> str:
+    """
+    Delete MIDI notes from a clip by their IDs.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - note_ids: List of note IDs to delete (get IDs from get_notes_from_clip)
+    """
+    return {"track_index": track_index, "clip_index": clip_index, "note_ids": note_ids}
+
+
+@mcp.tool()
+@ableton_command("modify_clip_notes")
+def modify_clip_notes(ctx: Context, track_index: int, clip_index: int,
+                      modifications: List[Dict[str, Union[int, float, bool]]]) -> str:
+    """
+    Modify properties of MIDI notes by their IDs.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - modifications: List of modification dicts. Each must have 'note_id' and can include:
+                    pitch, start_time, duration, velocity, mute, probability (0.0-1.0)
+
+    Example modifications:
+    [{"note_id": 123, "velocity": 64, "probability": 0.75},
+     {"note_id": 456, "pitch": 72, "start_time": 2.0}]
+    """
+    return {"track_index": track_index, "clip_index": clip_index, "modifications": modifications}
+
+
+@mcp.tool()
+@ableton_command("transpose_notes_in_clip")
+def transpose_notes_in_clip(ctx: Context, track_index: int, clip_index: int,
+                            semitones: int, note_ids: List[int] = None) -> str:
+    """
+    Transpose notes in a clip by semitones.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - semitones: Number of semitones to transpose (positive=up, negative=down)
+    - note_ids: Optional list of specific note IDs to transpose. If not provided, all notes are transposed.
+    """
+    return {"track_index": track_index, "clip_index": clip_index,
+            "semitones": semitones, "note_ids": note_ids}
+
+
+@mcp.tool()
+@ableton_command("quantize_notes_in_clip")
+def quantize_notes_in_clip(ctx: Context, track_index: int, clip_index: int,
+                           grid_size: float, note_ids: List[int] = None) -> str:
+    """
+    Quantize note start times to a grid.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - grid_size: Grid size in beats (0.25=1/16 note, 0.5=1/8 note, 1.0=1/4 note)
+    - note_ids: Optional list of specific note IDs to quantize. If not provided, all notes are quantized.
+    """
+    return {"track_index": track_index, "clip_index": clip_index,
+            "grid_size": grid_size, "note_ids": note_ids}
 
 
 @mcp.tool()

@@ -440,9 +440,49 @@ class AbletonMCP(ControlSurface):
     
     @commands.register("add_notes_to_clip", main_thread=True)
     def _add_notes_to_clip(self, track_index=None, clip_index=None, notes=None):
-        """Add MIDI notes to a clip"""
+        """Add MIDI notes to a clip using Live 11+ API."""
         if notes is None:
             notes = []
+        try:
+            import Live
+
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            clip = clip_slot.clip
+
+            # Build MidiNoteSpecification objects for Live 11+ API
+            note_specs = []
+            for note in notes:
+                spec = Live.Clip.MidiNoteSpecification(
+                    pitch=int(note.get("pitch", 60)),
+                    start_time=float(note.get("start_time", 0.0)),
+                    duration=float(note.get("duration", 0.25)),
+                    velocity=float(note.get("velocity", 100)),
+                    mute=bool(note.get("mute", False))
+                )
+                note_specs.append(spec)
+
+            # add_new_notes expects a tuple of MidiNoteSpecification objects
+            clip.add_new_notes(tuple(note_specs))
+
+            return {
+                "note_count": len(notes)
+            }
+        except Exception as e:
+            self.log_message("Error adding notes to clip: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+    
+    # MIDI Note Manipulation Commands
+
+    @commands.register("get_notes_from_clip")
+    def _get_notes_from_clip(self, track_index=None, clip_index=None):
+        """Get all notes from a clip with their IDs (Live 11+ API)."""
         try:
             track_index = self._require_param("track_index", track_index)
             clip_index = self._require_param("clip_index", clip_index)
@@ -453,28 +493,233 @@ class AbletonMCP(ControlSurface):
 
             clip = clip_slot.clip
 
-            # Convert note data to Live's format
-            live_notes = []
-            for note in notes:
-                pitch = note.get("pitch", 60)
-                start_time = note.get("start_time", 0.0)
-                duration = note.get("duration", 0.25)
-                velocity = note.get("velocity", 100)
-                mute = note.get("mute", False)
-                
-                live_notes.append((pitch, start_time, duration, velocity, mute))
-            
-            # Add the notes
-            clip.set_notes(tuple(live_notes))
-            
-            result = {
-                "note_count": len(notes)
+            # Use get_notes_extended (Live 11+) to get notes with IDs
+            # Signature: (from_pitch, pitch_span, from_time, time_span)
+            notes_data = clip.get_notes_extended(0, 128, 0.0, clip.length)
+
+            notes = []
+            for note in notes_data:
+                notes.append({
+                    "note_id": note.note_id,
+                    "pitch": note.pitch,
+                    "start_time": note.start_time,
+                    "duration": note.duration,
+                    "velocity": note.velocity,
+                    "mute": note.mute,
+                    "probability": note.probability if hasattr(note, 'probability') else 1.0,
+                    "velocity_deviation": note.velocity_deviation if hasattr(note, 'velocity_deviation') else 0.0,
+                    "release_velocity": note.release_velocity if hasattr(note, 'release_velocity') else 64
+                })
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "clip_name": clip.name,
+                "clip_length": clip.length,
+                "note_count": len(notes),
+                "notes": notes
             }
-            return result
         except Exception as e:
-            self.log_message("Error adding notes to clip: " + str(e))
+            self.log_message("Error getting notes from clip: " + str(e))
+            self.log_message(traceback.format_exc())
             raise
-    
+
+    @commands.register("delete_notes_from_clip", main_thread=True)
+    def _delete_notes_from_clip(self, track_index=None, clip_index=None, note_ids=None):
+        """Delete notes from a clip by their IDs (Live 11+ API)."""
+        if note_ids is None:
+            note_ids = []
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            clip = clip_slot.clip
+
+            if not note_ids:
+                raise ValueError("No note_ids provided")
+
+            # Use remove_notes_by_id (Live 11+)
+            clip.remove_notes_by_id(note_ids)
+
+            return {
+                "deleted_count": len(note_ids),
+                "note_ids": note_ids
+            }
+        except Exception as e:
+            self.log_message("Error deleting notes from clip: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("modify_clip_notes", main_thread=True)
+    def _modify_clip_notes(self, track_index=None, clip_index=None, modifications=None):
+        """Modify note properties by ID (Live 11+ API).
+
+        Each modification dict must have 'note_id' and can include:
+        pitch, start_time, duration, velocity, mute, probability,
+        velocity_deviation, release_velocity
+        """
+        if modifications is None:
+            modifications = []
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            clip = clip_slot.clip
+
+            if not modifications:
+                raise ValueError("No modifications provided")
+
+            # Build a lookup of modifications by note_id
+            mods_by_id = {}
+            for mod in modifications:
+                if "note_id" not in mod:
+                    raise ValueError("Each modification must have a 'note_id'")
+                mods_by_id[mod["note_id"]] = mod
+
+            # Get all notes from clip
+            # Signature: (from_pitch, pitch_span, from_time, time_span)
+            notes = clip.get_notes_extended(0, 128, 0.0, clip.length)
+
+            # Modify notes in place
+            modified_count = 0
+            for note in notes:
+                if note.note_id in mods_by_id:
+                    mod = mods_by_id[note.note_id]
+                    if "pitch" in mod:
+                        note.pitch = int(mod["pitch"])
+                    if "start_time" in mod:
+                        note.start_time = float(mod["start_time"])
+                    if "duration" in mod:
+                        note.duration = float(mod["duration"])
+                    if "velocity" in mod:
+                        note.velocity = float(mod["velocity"])
+                    if "mute" in mod:
+                        note.mute = bool(mod["mute"])
+                    if "probability" in mod:
+                        note.probability = float(mod["probability"])
+                    if "velocity_deviation" in mod:
+                        note.velocity_deviation = float(mod["velocity_deviation"])
+                    if "release_velocity" in mod:
+                        note.release_velocity = float(mod["release_velocity"])
+                    modified_count += 1
+
+            # Apply the modifications back to the clip
+            clip.apply_note_modifications(notes)
+
+            return {
+                "modified_count": modified_count
+            }
+        except Exception as e:
+            self.log_message("Error modifying clip notes: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("transpose_notes_in_clip", main_thread=True)
+    def _transpose_notes_in_clip(self, track_index=None, clip_index=None, semitones=None, note_ids=None):
+        """Transpose notes in a clip by semitones.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip index
+            semitones: Number of semitones to transpose (positive=up, negative=down)
+            note_ids: Optional list of note IDs to transpose. If None, transposes all notes.
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            semitones = self._require_param("semitones", semitones)
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            clip = clip_slot.clip
+
+            # Get all notes - signature: (from_pitch, pitch_span, from_time, time_span)
+            notes = clip.get_notes_extended(0, 128, 0.0, clip.length)
+
+            # Build set of note_ids to transpose
+            note_ids_set = set(note_ids) if note_ids else None
+
+            # Modify notes in place
+            transposed_count = 0
+            for note in notes:
+                if note_ids_set is None or note.note_id in note_ids_set:
+                    new_pitch = note.pitch + semitones
+                    # Clamp to MIDI range 0-127
+                    note.pitch = max(0, min(127, new_pitch))
+                    transposed_count += 1
+
+            # Apply modifications
+            clip.apply_note_modifications(notes)
+
+            return {
+                "transposed_count": transposed_count,
+                "semitones": semitones
+            }
+        except Exception as e:
+            self.log_message("Error transposing notes in clip: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("quantize_notes_in_clip", main_thread=True)
+    def _quantize_notes_in_clip(self, track_index=None, clip_index=None, grid_size=None, note_ids=None):
+        """Quantize note start times to a grid.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip index
+            grid_size: Grid size in beats (e.g., 0.25 for 1/16, 0.5 for 1/8, 1.0 for 1/4)
+            note_ids: Optional list of note IDs to quantize. If None, quantizes all notes.
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            grid_size = self._require_param("grid_size", grid_size)
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            if grid_size <= 0:
+                raise ValueError("grid_size must be positive")
+
+            clip = clip_slot.clip
+
+            # Get all notes - signature: (from_pitch, pitch_span, from_time, time_span)
+            notes = clip.get_notes_extended(0, 128, 0.0, clip.length)
+
+            # Build set of note_ids to quantize
+            note_ids_set = set(note_ids) if note_ids else None
+
+            # Modify notes in place
+            quantized_count = 0
+            for note in notes:
+                if note_ids_set is None or note.note_id in note_ids_set:
+                    # Round to nearest grid position
+                    note.start_time = round(note.start_time / grid_size) * grid_size
+                    quantized_count += 1
+
+            # Apply modifications
+            clip.apply_note_modifications(notes)
+
+            return {
+                "quantized_count": quantized_count,
+                "grid_size": grid_size
+            }
+        except Exception as e:
+            self.log_message("Error quantizing notes in clip: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
     @commands.register("set_clip_name", main_thread=True)
     def _set_clip_name(self, track_index=None, clip_index=None, name=""):
         """Set the name of a clip"""

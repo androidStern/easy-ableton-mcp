@@ -319,3 +319,63 @@ All 17 issues addressed:
 - 4 skipped (#11 part of #8, #12 UX value, #14 low likelihood, #15 marginal benefit)
 
 CODE_REVIEW.md deleted.
+
+---
+
+## COMPLETED: Priority 2 - MIDI Note Manipulation (UPGRADES.md)
+
+### Problem
+Could only add notes to clips. No ability to read, modify, transpose, quantize, or delete notes.
+
+### Solution
+Implemented 5 new tools using Live 11+ Note API:
+
+1. **get_notes_from_clip** - Returns all notes with IDs, pitches, times, velocities, probabilities
+2. **delete_notes_from_clip** - Deletes notes by ID using `remove_notes_by_id()`
+3. **modify_clip_notes** - Modifies note properties (velocity, probability, etc.) by ID
+4. **transpose_notes_in_clip** - Shifts notes by semitones (with MIDI range clamping)
+5. **quantize_notes_in_clip** - Snaps note start times to grid
+
+### Live 11+ API Used
+- `clip.get_notes_extended(from_pitch, pitch_span, from_time, time_span)` → MidiNoteVector
+- `clip.add_new_notes(tuple(MidiNoteSpecification(...)))` - adds notes
+- `clip.apply_note_modifications(notes)` - modifies notes in-place
+- `clip.remove_notes_by_id([id, ...])` - deletes by ID
+
+**Key learnings:**
+- Parameter order: `get_notes_extended(from_pitch, pitch_span, from_time, time_span)` NOT `(from_time, from_pitch, ...)`
+- `add_new_notes` requires `Live.Clip.MidiNoteSpecification` objects, not dicts
+- `apply_note_modifications` takes the MidiNoteVector directly (modify notes in-place, then pass back)
+
+### Test Coverage
+Added round-trip integration test in `scripts/test_mcp_tools.py`:
+1. Get existing notes (verify read)
+2. Add test note at pitch 72, time 0.13
+3. Verify note added, capture ID
+4. Modify velocity=64, probability=0.75
+5. Transpose +12 semitones (72→84)
+6. Quantize to 0.25 grid (0.13→0.25)
+7. Delete test note
+8. Restore original pitches (-12)
+
+### Test Results
+```
+--- Test: MIDI Note Round-Trip ---
+  1. Getting existing notes...
+     Found 7 existing notes
+  2. Adding test note at pitch 72, time 0.13...
+  3. Verifying note was added...
+     Added note ID: 8
+  4. Modifying note (velocity=64, probability=0.75)...
+     Velocity updated to 64.0
+  5. Transposing all notes +12 semitones...
+     Pitch transposed to 84
+  6. Quantizing to 0.25 beat grid...
+     Start time quantized to 0.25
+  7. Deleting test note...
+     Note deleted, 7 notes remaining
+  8. Restoring original pitches (-12 semitones)...
+  PASS
+```
+
+All tests passing.
