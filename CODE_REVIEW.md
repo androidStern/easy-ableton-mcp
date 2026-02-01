@@ -301,35 +301,11 @@ Updated 3 call sites to use helpers.
 
 ## Technical Debt
 
-### 14. Global `_ableton_connection` is Thread-Unsafe
+### 14. Global `_ableton_connection` is Thread-Unsafe ⏭️ SKIPPED
 
-**Status**: CONFIRMED
+**Status**: SKIPPED
 
-**Location**: `MCP_Server/server.py:112-176`
-
-```python
-# Line 112-113
-# Global connection for resources
-_ableton_connection = None
-
-def get_ableton_connection():
-    """Get or create a persistent Ableton connection."""
-    global _ableton_connection
-
-    if _ableton_connection is not None and _ableton_connection.sock is not None:
-        return _ableton_connection
-
-    # Connection doesn't exist or socket is dead, create a new one
-    _ableton_connection = None
-    # ... creation logic ...
-```
-
-**Problem**:
-1. Multiple concurrent tool calls can race to create/check the connection
-2. No synchronization (mutex/lock) around the global state
-3. Check-then-act pattern: `if _ableton_connection is not None` can race with another thread setting it to `None`
-
-**Context**: FastMCP may handle concurrent requests. While Python's GIL provides some protection, the read-modify-write pattern on `_ableton_connection` is not atomic.
+**Reason**: Failure mode is socket leak (orphaned connection) if two tool calls race at startup. Likelihood is low - requires exact timing. Real bottleneck is Ableton's main thread anyway. Not worth the complexity.
 
 ---
 
@@ -414,31 +390,13 @@ def process_item(item, depth=0):
 
 ---
 
-### 17. Magic Number in preferences.py
+### 17. Magic Number in preferences.py ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Location**: `MCP_Server/preferences.py:244`
+**Fix**: Extracted `MIN_ZERO_PADDING_RUN = 8` constant with docstring explaining it's empirically determined.
 
-```python
-# Search for 8+ consecutive zeros (the padding before control surface slots)
-min_zero_run = 8
-found_padding = False
-
-while offset < len(data) - min_zero_run:
-    # Check if we have a run of zeros starting here
-    if data[offset : offset + min_zero_run] == b"\x00" * min_zero_run:
-        found_padding = True
-        break
-    offset += 1
-```
-
-**Problem**:
-- `8` is a magic number with no explanation
-- Comment says "8+ consecutive zeros" but doesn't explain why 8
-- The actual padding in Preferences.cfg files may vary
-
-**Context**: From the module docstring (line 29): "Skip zero padding bytes" - the number 8 appears to be empirically determined from analyzing Preferences.cfg files, but this isn't documented.
+**Location**: `MCP_Server/preferences.py:60-61`
 
 ---
 

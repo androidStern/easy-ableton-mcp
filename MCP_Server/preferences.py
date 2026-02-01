@@ -56,6 +56,10 @@ NUM_CONTROL_SURFACE_SLOTS = 7
 # Maximum reasonable string length (sanity check)
 MAX_STRING_LENGTH = 1000
 
+# Minimum consecutive zero bytes that indicate padding before control surface slots
+# Empirically determined from analyzing Preferences.cfg file structure
+MIN_ZERO_PADDING_RUN = 8
+
 
 class PreferencesParseError(Exception):
     """Raised when parsing Preferences.cfg fails."""
@@ -232,13 +236,12 @@ def _find_control_surface_start(data: bytes) -> int:
     # the MIDI device preferences from the control surface slots
     offset = marker_offset + len(MIDI_OUT_DEVICE_PREFS_MARKER)
 
-    # Search for 8+ consecutive zeros (the padding before control surface slots)
-    min_zero_run = 8
+    # Search for consecutive zeros (the padding before control surface slots)
     found_padding = False
 
-    while offset < len(data) - min_zero_run:
+    while offset < len(data) - MIN_ZERO_PADDING_RUN:
         # Check if we have a run of zeros starting here
-        if data[offset : offset + min_zero_run] == b"\x00" * min_zero_run:
+        if data[offset : offset + MIN_ZERO_PADDING_RUN] == b"\x00" * MIN_ZERO_PADDING_RUN:
             found_padding = True
             break
         offset += 1
