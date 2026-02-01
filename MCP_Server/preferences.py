@@ -192,15 +192,7 @@ def _find_last_marker(data: bytes, marker: bytes) -> int:
     Raises:
         ControlSurfaceSlotsNotFoundError: If marker is not found.
     """
-    idx = 0
-    last_found = -1
-
-    while True:
-        idx = data.find(marker, idx)
-        if idx == -1:
-            break
-        last_found = idx
-        idx += 1
+    last_found = data.rfind(marker)
 
     if last_found == -1:
         raise ControlSurfaceSlotsNotFoundError(

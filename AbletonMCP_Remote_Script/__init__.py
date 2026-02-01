@@ -781,6 +781,16 @@ class AbletonMCP(ControlSurface):
 
     # Device parameter control methods
 
+    def _normalize_param_value(self, param):
+        """Convert parameter's actual value to normalized 0.0-1.0 range."""
+        if (param.max - param.min) == 0:
+            return 0.0
+        return (param.value - param.min) / (param.max - param.min)
+
+    def _denormalize_param_value(self, param, normalized):
+        """Convert normalized 0.0-1.0 value to parameter's actual range."""
+        return param.min + normalized * (param.max - param.min)
+
     @commands.register("get_device_parameters")
     def _get_device_parameters(self, track_index=None, device_index=None, device_path=None):
         """
@@ -802,14 +812,11 @@ class AbletonMCP(ControlSurface):
 
             parameters_info = []
             for i, p in enumerate(device.parameters):
-                norm_val = 0.0
-                if (p.max - p.min) != 0:
-                    norm_val = (p.value - p.min) / (p.max - p.min)
                 parameters_info.append({
                     "index": i,
                     "name": p.name,
                     "value": p.value,
-                    "normalized_value": norm_val,
+                    "normalized_value": self._normalize_param_value(p),
                     "min": p.min,
                     "max": p.max,
                     "is_quantized": p.is_quantized,
@@ -859,8 +866,7 @@ class AbletonMCP(ControlSurface):
                 raise ValueError("Normalized value {0} must be between 0.0 and 1.0".format(value))
 
             parameter = device.parameters[parameter_index]
-            actual_value = parameter.min + value * (parameter.max - parameter.min)
-            parameter.value = actual_value
+            parameter.value = self._denormalize_param_value(parameter, value)
 
             return {
                 "parameter_index": parameter_index,
@@ -914,8 +920,7 @@ class AbletonMCP(ControlSurface):
                     continue
 
                 param = device.parameters[p_idx]
-                actual_val = param.min + val_norm * (param.max - param.min)
-                param.value = actual_val
+                param.value = self._denormalize_param_value(param, val_norm)
                 updated_params_info.append({
                     "index": p_idx,
                     "name": param.name,

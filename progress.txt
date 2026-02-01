@@ -177,6 +177,22 @@ TDD approach:
 
 ---
 
+## COMPLETED: CODE_REVIEW.md Issues #8 & #9
+
+### Issue #8 - Duplicate Normalization Logic
+Extracted helper methods:
+- `_normalize_param_value(param)` - actual value to 0.0-1.0
+- `_denormalize_param_value(param, normalized)` - 0.0-1.0 to actual
+Updated 3 call sites.
+
+### Issue #9 - Linear Search
+Replaced loop with `rfind()` - one-liner fix.
+
+### Test Results
+- 67 tests passing
+
+---
+
 ## COMPLETED: CODE_REVIEW.md Issue #7 - Subprocess Timeout
 
 ### Problem

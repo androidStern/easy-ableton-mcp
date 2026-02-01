@@ -235,64 +235,27 @@ Also added 5-second connect timeout and `_cleanup_socket()` helper.
 
 ---
 
-### 8. Potential Division by Zero
+### 8. Potential Division by Zero ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Location**: `AbletonMCP_Remote_Script/__init__.py:842-844`
+**Fix**: Extracted helper methods to eliminate duplicate normalization logic:
+- `_normalize_param_value(param)` - convert actual value to 0.0-1.0
+- `_denormalize_param_value(param, normalized)` - convert 0.0-1.0 to actual
 
-```python
-norm_val = 0.0
-if (p.max - p.min) != 0:
-    norm_val = (p.value - p.min) / (p.max - p.min)
-```
+Updated 3 call sites to use helpers.
 
-**Analysis**: The code has a guard `if (p.max - p.min) != 0`, so division by zero is actually **prevented**. However:
-
-1. The guard is inconsistent with line 894:
-```python
-# Line 894 - no guard
-actual_value = parameter.min + value * (parameter.max - parameter.min)
-```
-This doesn't divide, but if `max == min`, setting any `value` (0.0-1.0) produces the same result.
-
-2. The normalization logic is duplicated at lines 843-844 and (inversely) at 894, 944.
-
-**Verdict**: The division by zero is guarded, but the review correctly identified duplicate normalization logic that should be extracted.
+**Location**: `AbletonMCP_Remote_Script/__init__.py:784-792`
 
 ---
 
-### 9. Linear Search for Marker in preferences.py
+### 9. Linear Search for Marker in preferences.py ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Location**: `MCP_Server/preferences.py:182-210`
+**Fix**: Replaced loop with single `rfind()` call - the canonical solution.
 
-```python
-def _find_last_marker(data: bytes, marker: bytes) -> int:
-    """Find the last occurrence of a marker in binary data."""
-    idx = 0
-    last_found = -1
-
-    while True:
-        idx = data.find(marker, idx)
-        if idx == -1:
-            break
-        last_found = idx
-        idx += 1
-
-    if last_found == -1:
-        raise ControlSurfaceSlotsNotFoundError(...)
-
-    return last_found
-```
-
-**Problem**: Uses forward iteration with `str.find()` instead of `str.rfind()`.
-
-**Current approach**: O(n*m) where n = file size, m = marker length (worst case with many matches)
-**With `rfind()`**: Single call, typically O(n)
-
-**File context**: Preferences.cfg files are typically 50-100KB. Performance impact is negligible, but `rfind()` is the canonical solution for finding the last occurrence of a substring.
+**Location**: `MCP_Server/preferences.py:182-198`
 
 ---
 
