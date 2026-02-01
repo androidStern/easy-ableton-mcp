@@ -177,6 +177,27 @@ TDD approach:
 
 ---
 
+## COMPLETED: CODE_REVIEW.md Issue #5 - Broad except Exception in Connection
+
+### Problem
+`connect()` caught all exceptions identically, making diagnosis difficult.
+No way to distinguish recoverable errors (retry) from unrecoverable ones (fail fast).
+
+### Solution
+Replaced broad `except Exception` with specific handlers:
+- `ConnectionRefusedError` → log warning, return False (retry)
+- `socket.timeout` → log warning, return False (retry)
+- `OSError` → log error, raise (fail fast - permission/firewall issues won't fix themselves)
+
+Also added:
+- 5-second connect timeout (was unbounded)
+- `_cleanup_socket()` helper method
+
+### Test Results
+- 67 tests passing
+
+---
+
 ## COMPLETED: Crash Recovery Dialog Fix
 
 ### Problem

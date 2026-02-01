@@ -23,19 +23,49 @@ class AbletonConnection:
     sock: socket.socket = None
     
     def connect(self) -> bool:
-        """Connect to the Ableton Remote Script socket server"""
+        """Connect to the Ableton Remote Script socket server.
+
+        Returns:
+            True if connected successfully, False if recoverable error (retry).
+
+        Raises:
+            OSError: For unrecoverable errors (permission denied, etc.)
+        """
         if self.sock:
             return True
-            
+
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(5.0)  # 5 second connect timeout
             self.sock.connect((self.host, self.port))
+            self.sock.settimeout(None)  # Clear timeout for normal operations
             logger.info(f"Connected to Ableton at {self.host}:{self.port}")
             return True
-        except Exception as e:
-            logger.error(f"Failed to connect to Ableton: {str(e)}")
-            self.sock = None
+        except ConnectionRefusedError:
+            # Ableton not accepting connections yet - recoverable, retry makes sense
+            logger.warning(f"Connection refused at {self.host}:{self.port} - Ableton may still be starting")
+            self._cleanup_socket()
             return False
+        except socket.timeout:
+            # Slow to respond - recoverable
+            logger.warning(f"Connection timed out at {self.host}:{self.port} - Ableton may be busy")
+            self._cleanup_socket()
+            return False
+        except OSError as e:
+            # Permission denied, address in use, network unreachable, etc.
+            # These won't fix themselves - fail fast, don't waste retry attempts
+            logger.error(f"Socket error connecting to {self.host}:{self.port}: {e}")
+            self._cleanup_socket()
+            raise
+
+    def _cleanup_socket(self):
+        """Clean up socket on connection failure."""
+        if self.sock:
+            try:
+                self.sock.close()
+            except Exception:
+                pass
+            self.sock = None
     
     def disconnect(self):
         """Disconnect from the Ableton Remote Script"""

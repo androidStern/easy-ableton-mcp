@@ -196,31 +196,17 @@ result = self._create_clip(track_index, clip_index, length)
 
 ## Error Handling Issues
 
-### 5. Broad `except Exception` in Connection
+### 5. Broad `except Exception` in Connection ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Location**: `MCP_Server/server.py:34-37`
+**Fix**: Replaced broad `except Exception` with specific socket exception handling:
+- `ConnectionRefusedError` → return False (recoverable, retry)
+- `socket.timeout` → return False (recoverable, retry)
+- `OSError` → raise (unrecoverable, fail fast)
+Also added 5-second connect timeout and `_cleanup_socket()` helper.
 
-```python
-except Exception as e:
-    logger.error(f"Failed to connect to Ableton: {str(e)}")
-    self.sock = None
-    return False
-```
-
-**Problem**: This catches all exceptions including:
-- `socket.error` (connection refused)
-- `socket.timeout`
-- `OSError` (permission denied, address in use)
-- Unexpected exceptions like `MemoryError`
-
-Different connection failures have different meanings:
-- Connection refused = Ableton not running
-- Permission denied = firewall/security issue
-- Timeout = Ableton starting but not ready
-
-Treating all failures identically makes diagnosis difficult.
+**Location**: `MCP_Server/server.py:25-60`
 
 ---
 
