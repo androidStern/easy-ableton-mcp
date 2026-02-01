@@ -284,3 +284,38 @@ find ~/Library/Preferences/Ableton -maxdepth 2 -name "Undo" -type d -exec rm -rf
 ### Test Results
 - E2E tests now run without any manual intervention
 - Full dev-refresh.sh --test cycle completes automatically
+
+---
+
+## COMPLETED: CODE_REVIEW.md Issue #16 - get_browser_tree() Empty Children
+
+### Problem
+`process_item()` created a `children: []` array but never populated it. The function returned
+immediately without recursing into child items.
+
+### Solution
+Added recursion to `process_item()`:
+- Iterates `item.children` when `depth < max_depth`
+- Recursively calls `process_item(child, depth + 1)`
+- Adds `has_more: true` flag when children exist beyond max_depth
+- Default `max_depth=4` on `get_browser_tree()` method
+
+### Test Results
+- 67 tests passing
+- E2E tests passing
+
+---
+
+## SKIPPED: CODE_REVIEW.md Issue #15 - load_drum_kit atomicity
+
+**Reason**: Partial state (drum rack without kit) is valid. Error messages are honest. Rollback adds complexity for marginal benefit.
+
+---
+
+## CODE_REVIEW.md Complete
+
+All 17 issues addressed:
+- 13 completed (#1-10, #13, #16, #17)
+- 4 skipped (#11 part of #8, #12 UX value, #14 low likelihood, #15 marginal benefit)
+
+CODE_REVIEW.md deleted.

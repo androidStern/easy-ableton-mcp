@@ -1140,7 +1140,7 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("get_browser_tree")
-    def get_browser_tree(self, category_type="all"):
+    def get_browser_tree(self, category_type="all", max_depth=4):
         """
         Get a simplified tree of browser categories.
         
@@ -1174,17 +1174,27 @@ class AbletonMCP(ControlSurface):
             def process_item(item, depth=0):
                 if not item:
                     return None
-                
+
+                has_children = hasattr(item, 'children') and bool(item.children)
                 result = {
                     "name": item.name if hasattr(item, 'name') else "Unknown",
-                    "is_folder": hasattr(item, 'children') and bool(item.children),
+                    "is_folder": has_children,
                     "is_device": hasattr(item, 'is_device') and item.is_device,
                     "is_loadable": hasattr(item, 'is_loadable') and item.is_loadable,
                     "uri": item.uri if hasattr(item, 'uri') else None,
                     "children": []
                 }
-                
-                
+
+                # Recurse into children up to max_depth
+                if has_children and depth < max_depth:
+                    for child in item.children:
+                        child_result = process_item(child, depth + 1)
+                        if child_result:
+                            result["children"].append(child_result)
+                elif has_children:
+                    # Mark that there are more children beyond max_depth
+                    result["has_more"] = True
+
                 return result
             
             # Process based on category type and available attributes
