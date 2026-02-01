@@ -16,14 +16,19 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 
 ## Current easy-ableton-mcp Capabilities
 
-### What We Have (17 tools)
+### What We Have (25 tools)
 - `get_session_info` - tempo, signature, track count
 - `get_session_tree` - full recursive tree with devices/chains/pads
 - `get_track_info` - track details with clips and devices
 - `create_midi_track` - create track at index
 - `set_track_name` - rename track
 - `create_clip` - create MIDI clip
-- `add_notes_to_clip` - add notes (pitch, time, duration, velocity, mute)
+- `add_notes_to_clip` - add notes (Live 11+ API with MidiNoteSpecification)
+- `get_notes_from_clip` - read notes with IDs ✅ NEW
+- `delete_notes_from_clip` - delete by ID ✅ NEW
+- `modify_clip_notes` - edit velocity, probability, etc. ✅ NEW
+- `transpose_notes_in_clip` - shift by semitones ✅ NEW
+- `quantize_notes_in_clip` - snap to grid ✅ NEW
 - `set_clip_name` - rename clip
 - `fire_clip` / `stop_clip` - clip playback control
 - `start_playback` / `stop_playback` - transport control
@@ -31,16 +36,19 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 - `load_instrument_or_effect` - load by URI
 - `load_drum_kit` - load drum rack + kit
 - `get_browser_tree` / `get_browser_items_at_path` - browser navigation
+- `get_device_parameters` - list all params on device ✅ NEW
+- `set_device_parameter` - set param by index (normalized 0-1) ✅ NEW
+- `batch_set_device_parameters` - set multiple params at once ✅ NEW
 
 ### What We're Missing
 
-Everything below.
+Priorities 3+ below.
 
 ---
 
-## Priority 1: Device Parameter Control
+## Priority 1: Device Parameter Control ✅ DONE
 
-**Impact: HIGH** - This is the #1 gap. Cannot adjust EQ, filters, synth params, etc.
+**Status: IMPLEMENTED** - get_device_parameters, set_device_parameter, batch_set_device_parameters
 
 ### Features Needed
 
@@ -67,9 +75,9 @@ param.value = 0.5  // Settable
 
 ---
 
-## Priority 2: MIDI Note Manipulation
+## Priority 2: MIDI Note Manipulation ✅ DONE
 
-**Impact: HIGH** - Can only add notes, cannot read/edit/delete/move them.
+**Status: IMPLEMENTED** - get_notes_from_clip, delete_notes_from_clip, modify_clip_notes, transpose_notes_in_clip, quantize_notes_in_clip
 
 ### Features Needed
 
@@ -427,9 +435,9 @@ unsubscribe()
 ## Summary: Implementation Roadmap
 
 ### Phase 1: Core Gaps (High Impact)
-1. **Device Parameters** - get/set params on any device
-2. **MIDI Note Read/Edit** - get notes, delete, modify, transpose
-3. **Track Mixer** - volume, pan, mute, solo, arm
+1. ~~**Device Parameters**~~ ✅ DONE - get/set params on any device
+2. ~~**MIDI Note Read/Edit**~~ ✅ DONE - get notes, delete, modify, transpose, quantize
+3. **Track Mixer** - volume, pan, mute, solo, arm ← NEXT
 
 ### Phase 2: Creative Features
 4. **Automation** - envelope points, clear
@@ -460,13 +468,13 @@ unsubscribe()
 | Set track mute/solo | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
 | Create clip | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Add notes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Get notes | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Delete notes | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Transpose notes | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| Quantize notes | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
-| Note probability | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Get device params | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Set device params | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Get notes | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Delete notes | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Transpose notes | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Quantize notes | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
+| Note probability | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Get device params | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Set device params | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Automation points | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Clear automation | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
 | Scene management | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
