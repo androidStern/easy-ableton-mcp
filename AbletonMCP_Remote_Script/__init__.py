@@ -266,6 +266,19 @@ class AbletonMCP(ControlSurface):
             raise ValueError("Missing required parameter: " + name)
         return value
 
+    def _get_track(self, track_index):
+        """Validate track_index and return the track."""
+        if track_index < 0 or track_index >= len(self._song.tracks):
+            raise IndexError("Track index out of range")
+        return self._song.tracks[track_index]
+
+    def _get_clip_slot(self, track_index, clip_index):
+        """Validate indices and return the clip slot."""
+        track = self._get_track(track_index)
+        if clip_index < 0 or clip_index >= len(track.clip_slots):
+            raise IndexError("Clip index out of range")
+        return track.clip_slots[clip_index]
+
     def _process_command(self, command):
         """Process a command from the client using the command registry."""
         command_type = command.get("type", "")
@@ -315,11 +328,8 @@ class AbletonMCP(ControlSurface):
         """Get information about a track"""
         try:
             track_index = self._require_param("track_index", track_index)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
-            
+            track = self._get_track(track_index)
+
             # Get clip slots
             clip_slots = []
             for slot_index, slot in enumerate(track.clip_slots):
@@ -393,11 +403,7 @@ class AbletonMCP(ControlSurface):
         """Set the name of a track"""
         try:
             track_index = self._require_param("track_index", track_index)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            # Set the name
-            track = self._song.tracks[track_index]
+            track = self._get_track(track_index)
             track.name = name
             
             result = {
@@ -414,16 +420,8 @@ class AbletonMCP(ControlSurface):
         try:
             track_index = self._require_param("track_index", track_index)
             clip_index = self._require_param("clip_index", clip_index)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
-            
-            if clip_index < 0 or clip_index >= len(track.clip_slots):
-                raise IndexError("Clip index out of range")
-            
-            clip_slot = track.clip_slots[clip_index]
-            
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
             # Check if the clip slot already has a clip
             if clip_slot.has_clip:
                 raise Exception("Clip slot already has a clip")
@@ -448,15 +446,7 @@ class AbletonMCP(ControlSurface):
         try:
             track_index = self._require_param("track_index", track_index)
             clip_index = self._require_param("clip_index", clip_index)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-
-            track = self._song.tracks[track_index]
-
-            if clip_index < 0 or clip_index >= len(track.clip_slots):
-                raise IndexError("Clip index out of range")
-
-            clip_slot = track.clip_slots[clip_index]
+            clip_slot = self._get_clip_slot(track_index, clip_index)
 
             if not clip_slot.has_clip:
                 raise Exception("No clip in slot")
@@ -491,15 +481,7 @@ class AbletonMCP(ControlSurface):
         try:
             track_index = self._require_param("track_index", track_index)
             clip_index = self._require_param("clip_index", clip_index)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
-            
-            if clip_index < 0 or clip_index >= len(track.clip_slots):
-                raise IndexError("Clip index out of range")
-            
-            clip_slot = track.clip_slots[clip_index]
+            clip_slot = self._get_clip_slot(track_index, clip_index)
             
             if not clip_slot.has_clip:
                 raise Exception("No clip in slot")
@@ -535,16 +517,8 @@ class AbletonMCP(ControlSurface):
         try:
             track_index = self._require_param("track_index", track_index)
             clip_index = self._require_param("clip_index", clip_index)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
-            
-            if clip_index < 0 or clip_index >= len(track.clip_slots):
-                raise IndexError("Clip index out of range")
-            
-            clip_slot = track.clip_slots[clip_index]
-            
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
             if not clip_slot.has_clip:
                 raise Exception("No clip in slot")
             
@@ -564,16 +538,8 @@ class AbletonMCP(ControlSurface):
         try:
             track_index = self._require_param("track_index", track_index)
             clip_index = self._require_param("clip_index", clip_index)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
-            
-            if clip_index < 0 or clip_index >= len(track.clip_slots):
-                raise IndexError("Clip index out of range")
-            
-            clip_slot = track.clip_slots[clip_index]
-            
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
             clip_slot.stop()
             
             result = {
@@ -706,11 +672,8 @@ class AbletonMCP(ControlSurface):
         try:
             track_index = self._require_param("track_index", track_index)
             item_uri = self._require_param("item_uri", item_uri)
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
-            
+            track = self._get_track(track_index)
+
             # Access the application's browser instance instead of creating a new one
             app = self.application()
             
@@ -990,12 +953,7 @@ class AbletonMCP(ControlSurface):
             IndexError: If any index is out of range
             ValueError: If device doesn't support chains/drum pads
         """
-        # Validate track index
-        if track_index < 0 or track_index >= len(self._song.tracks):
-            raise IndexError("Track index {0} out of range (0-{1})".format(
-                track_index, len(self._song.tracks) - 1))
-
-        track = self._song.tracks[track_index]
+        track = self._get_track(track_index)
 
         # Validate device index
         if device_index < 0 or device_index >= len(track.devices):

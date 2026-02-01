@@ -261,51 +261,15 @@ Updated 3 call sites to use helpers.
 
 ## Simplification Opportunities
 
-### 10. Repeated Track Index Validation
+### 10. Repeated Track Index Validation ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Locations** in `AbletonMCP_Remote_Script/__init__.py`:
+**Fix**: Added helper methods:
+- `_get_track(track_index)` - validates and returns track (9 call sites updated)
+- `_get_clip_slot(track_index, clip_index)` - validates and returns clip slot (5 call sites updated)
 
-```python
-# Line 385-386
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-
-# Line 460-461
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-
-# Line 478-479
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-
-# Line 507-508
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-
-# Line 547-548
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-
-# Line 587-588
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-
-# Line 614-615
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-
-# Line 749-750
-if track_index < 0 or track_index >= len(self._song.tracks):
-    raise IndexError("Track index out of range")
-```
-
-**Count**: 8 occurrences of identical validation logic.
-
-**Additional duplications**:
-- Clip index validation appears 6 times
-- Device index validation appears in `_resolve_device` but inconsistent usage elsewhere
+**Location**: `AbletonMCP_Remote_Script/__init__.py:269-280`
 
 ---
 
