@@ -413,7 +413,59 @@ class AbletonMCP(ControlSurface):
         except Exception as e:
             self.log_message("Error setting track name: " + str(e))
             raise
-    
+
+    @commands.register("set_track_volume", main_thread=True)
+    def _set_track_volume(self, track_index=None, volume=None):
+        """Set the volume of a track (0.0 to 1.0)"""
+        try:
+            track_index = self._require_param("track_index", track_index)
+            volume = self._require_param("volume", volume)
+            track = self._get_track(track_index)
+            track.mixer_device.volume.value = volume
+            return {"volume": track.mixer_device.volume.value}
+        except Exception as e:
+            self.log_message("Error setting track volume: " + str(e))
+            raise
+
+    @commands.register("set_track_pan", main_thread=True)
+    def _set_track_pan(self, track_index=None, pan=None):
+        """Set the pan of a track (-1.0 left to 1.0 right)"""
+        try:
+            track_index = self._require_param("track_index", track_index)
+            pan = self._require_param("pan", pan)
+            track = self._get_track(track_index)
+            track.mixer_device.panning.value = pan
+            return {"panning": track.mixer_device.panning.value}
+        except Exception as e:
+            self.log_message("Error setting track pan: " + str(e))
+            raise
+
+    @commands.register("set_track_mute", main_thread=True)
+    def _set_track_mute(self, track_index=None, mute=None):
+        """Set the mute state of a track"""
+        try:
+            track_index = self._require_param("track_index", track_index)
+            mute = self._require_param("mute", mute)
+            track = self._get_track(track_index)
+            track.mute = bool(mute)
+            return {"mute": track.mute}
+        except Exception as e:
+            self.log_message("Error setting track mute: " + str(e))
+            raise
+
+    @commands.register("set_track_solo", main_thread=True)
+    def _set_track_solo(self, track_index=None, solo=None):
+        """Set the solo state of a track"""
+        try:
+            track_index = self._require_param("track_index", track_index)
+            solo = self._require_param("solo", solo)
+            track = self._get_track(track_index)
+            track.solo = bool(solo)
+            return {"solo": track.solo}
+        except Exception as e:
+            self.log_message("Error setting track solo: " + str(e))
+            raise
+
     @commands.register("create_clip", main_thread=True)
     def _create_clip(self, track_index=None, clip_index=None, length=4.0):
         """Create a new MIDI clip in the specified track and clip slot"""
@@ -444,10 +496,11 @@ class AbletonMCP(ControlSurface):
         if notes is None:
             notes = []
         try:
-            import Live
-
             track_index = self._require_param("track_index", track_index)
             clip_index = self._require_param("clip_index", clip_index)
+
+            import Live
+
             clip_slot = self._get_clip_slot(track_index, clip_index)
 
             if not clip_slot.has_clip:
@@ -717,6 +770,265 @@ class AbletonMCP(ControlSurface):
             }
         except Exception as e:
             self.log_message("Error quantizing notes in clip: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    # Automation Envelope Commands
+
+    def _get_envelope(self, track_index, clip_index, device_index, parameter_index):
+        """Get the automation envelope for a device parameter on a clip.
+
+        Returns (clip, device, parameter, envelope) tuple.
+        envelope may be None if no automation exists for this parameter.
+        """
+        clip_slot = self._get_clip_slot(track_index, clip_index)
+        if not clip_slot.has_clip:
+            raise Exception("No clip in slot")
+
+        clip = clip_slot.clip
+        track = self._get_track(track_index)
+
+        if device_index < 0 or device_index >= len(track.devices):
+            raise IndexError("Device index out of range")
+        device = track.devices[device_index]
+
+        if parameter_index < 0 or parameter_index >= len(device.parameters):
+            raise IndexError("Parameter index out of range")
+        parameter = device.parameters[parameter_index]
+
+        # Get the automation envelope (may be None if no automation exists)
+        envelope = clip.automation_envelope(parameter)
+
+        return clip, device, parameter, envelope
+
+    @commands.register("get_clip_envelope")
+    def _get_clip_envelope(self, track_index=None, clip_index=None, device_index=None, parameter_index=None):
+        """Get information about a clip's automation envelope for a device parameter.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip index
+            device_index: Device index on the track
+            parameter_index: Parameter index on the device
+
+        Returns:
+            Dictionary with envelope info. has_envelope is False if no automation exists.
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            device_index = self._require_param("device_index", device_index)
+            parameter_index = self._require_param("parameter_index", parameter_index)
+
+            clip, device, parameter, envelope = self._get_envelope(
+                track_index, clip_index, device_index, parameter_index
+            )
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "device_index": device_index,
+                "device_name": device.name,
+                "parameter_index": parameter_index,
+                "parameter_name": parameter.name,
+                "has_envelope": envelope is not None
+            }
+        except Exception as e:
+            self.log_message("Error getting clip envelope: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("get_envelope_value_at_time")
+    def _get_envelope_value_at_time(self, track_index=None, clip_index=None, device_index=None, parameter_index=None, time=None):
+        """Get the automation envelope value at a specific time.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip index
+            device_index: Device index on the track
+            parameter_index: Parameter index on the device
+            time: Time position in beats
+
+        Returns:
+            Dictionary with the value at the specified time.
+            Returns value=None if no automation envelope exists.
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            device_index = self._require_param("device_index", device_index)
+            parameter_index = self._require_param("parameter_index", parameter_index)
+            time = self._require_param("time", time)
+
+            clip, device, parameter, envelope = self._get_envelope(
+                track_index, clip_index, device_index, parameter_index
+            )
+
+            if envelope is None:
+                return {
+                    "track_index": track_index,
+                    "clip_index": clip_index,
+                    "device_index": device_index,
+                    "parameter_index": parameter_index,
+                    "parameter_name": parameter.name,
+                    "time": time,
+                    "value": None,
+                    "has_envelope": False
+                }
+
+            value = envelope.value_at_time(float(time))
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "device_index": device_index,
+                "parameter_index": parameter_index,
+                "parameter_name": parameter.name,
+                "time": time,
+                "value": value,
+                "has_envelope": True
+            }
+        except Exception as e:
+            self.log_message("Error getting envelope value at time: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("create_automation_envelope", main_thread=True)
+    def _create_automation_envelope(self, track_index=None, clip_index=None, device_index=None, parameter_index=None):
+        """Create an automation envelope for a device parameter on a clip.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip index
+            device_index: Device index on the track
+            parameter_index: Parameter index on the device
+
+        Returns:
+            Dictionary confirming the creation
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            device_index = self._require_param("device_index", device_index)
+            parameter_index = self._require_param("parameter_index", parameter_index)
+
+            clip, device, parameter, envelope = self._get_envelope(
+                track_index, clip_index, device_index, parameter_index
+            )
+
+            if envelope is not None:
+                return {
+                    "track_index": track_index,
+                    "clip_index": clip_index,
+                    "device_index": device_index,
+                    "parameter_index": parameter_index,
+                    "parameter_name": parameter.name,
+                    "created": False,
+                    "already_exists": True
+                }
+
+            clip.create_automation_envelope(parameter)
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "device_index": device_index,
+                "parameter_index": parameter_index,
+                "parameter_name": parameter.name,
+                "created": True
+            }
+        except Exception as e:
+            self.log_message("Error creating automation envelope: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("insert_envelope_point", main_thread=True)
+    def _insert_envelope_point(self, track_index=None, clip_index=None, device_index=None, parameter_index=None, time=None, value=None):
+        """Insert an automation point into a clip's envelope.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip index
+            device_index: Device index on the track
+            parameter_index: Parameter index on the device
+            time: Time position in beats
+            value: Normalized value (0.0 to 1.0)
+
+        Returns:
+            Dictionary confirming the insertion
+
+        Raises:
+            Exception: If no automation envelope exists. Call create_automation_envelope first.
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            device_index = self._require_param("device_index", device_index)
+            parameter_index = self._require_param("parameter_index", parameter_index)
+            time = self._require_param("time", time)
+            value = self._require_param("value", value)
+
+            if value < 0.0 or value > 1.0:
+                raise ValueError("Value must be between 0.0 and 1.0")
+
+            clip, device, parameter, envelope = self._get_envelope(
+                track_index, clip_index, device_index, parameter_index
+            )
+
+            if envelope is None:
+                raise Exception("No automation envelope exists. Call create_automation_envelope first.")
+
+            # insert_step signature: (time, value, step_duration)
+            # step_duration=0.0 creates a single breakpoint
+            envelope.insert_step(float(time), float(value), 0.0)
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "device_index": device_index,
+                "parameter_index": parameter_index,
+                "parameter_name": parameter.name,
+                "time": time,
+                "value": value,
+                "inserted": True
+            }
+        except Exception as e:
+            self.log_message("Error inserting envelope point: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("clear_clip_envelopes", main_thread=True)
+    def _clear_clip_envelopes(self, track_index=None, clip_index=None):
+        """Clear all automation envelopes from a clip.
+
+        WARNING: This clears ALL automation for ALL parameters on the clip,
+        not just a single parameter.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip index
+
+        Returns:
+            Dictionary confirming the clear operation
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            clip = clip_slot.clip
+            clip.clear_all_envelopes()
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "cleared": True
+            }
+        except Exception as e:
+            self.log_message("Error clearing clip envelopes: " + str(e))
             self.log_message(traceback.format_exc())
             raise
 
@@ -1385,13 +1697,16 @@ class AbletonMCP(ControlSurface):
             raise
     
     @commands.register("get_browser_tree")
-    def get_browser_tree(self, category_type="all", max_depth=4):
+    def get_browser_tree(self, category_type="all", max_depth=2, folders_only=True):
         """
         Get a simplified tree of browser categories.
-        
+
         Args:
             category_type: Type of categories to get ('all', 'instruments', 'sounds', etc.)
-            
+            max_depth: Maximum depth to traverse (default 2 to avoid huge responses)
+            folders_only: If True, only include folders, not loadable items (default True)
+                          Use get_browser_items_at_path to drill into specific folders.
+
         Returns:
             Dictionary with the browser tree structure
         """
@@ -1400,32 +1715,38 @@ class AbletonMCP(ControlSurface):
             app = self.application()
             if not app:
                 raise RuntimeError("Could not access Live application")
-                
+
             # Check if browser is available
             if not hasattr(app, 'browser') or app.browser is None:
                 raise RuntimeError("Browser is not available in the Live application")
-            
+
             # Log available browser attributes to help diagnose issues
             browser_attrs = [attr for attr in dir(app.browser) if not attr.startswith('_')]
             self.log_message("Available browser attributes: {0}".format(browser_attrs))
-            
+
             result = {
                 "type": category_type,
                 "categories": [],
                 "available_categories": browser_attrs
             }
-            
+
             # Helper function to process a browser item and its children
             def process_item(item, depth=0):
                 if not item:
                     return None
 
                 has_children = hasattr(item, 'children') and bool(item.children)
+                is_loadable = hasattr(item, 'is_loadable') and item.is_loadable
+
+                # Skip loadable (non-folder) items if folders_only is True
+                if folders_only and is_loadable and not has_children:
+                    return None
+
                 result = {
                     "name": item.name if hasattr(item, 'name') else "Unknown",
                     "is_folder": has_children,
                     "is_device": hasattr(item, 'is_device') and item.is_device,
-                    "is_loadable": hasattr(item, 'is_loadable') and item.is_loadable,
+                    "is_loadable": is_loadable,
                     "uri": item.uri if hasattr(item, 'uri') else None,
                     "children": []
                 }

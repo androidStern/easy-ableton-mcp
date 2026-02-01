@@ -38,6 +38,11 @@ class MockControlSurface:
 sys.modules['_Framework'] = MagicMock()
 sys.modules['_Framework.ControlSurface'] = MagicMock(ControlSurface=MockControlSurface)
 
+# Mock Live module for add_notes_to_clip (Live.Clip.MidiNoteSpecification)
+live_mock = MagicMock()
+live_mock.Clip.MidiNoteSpecification = MagicMock(return_value=MagicMock())
+sys.modules['Live'] = live_mock
+
 
 # ---------------------------------------------------------------------------
 # Fixture
@@ -77,6 +82,14 @@ def mcp():
     slot0.clip.length = 4.0
     slot0.clip.is_playing = False
     slot0.clip.is_recording = False
+
+    # Envelope mock for automation tests
+    envelope = MagicMock()
+    envelope.insert_step = MagicMock()
+    envelope.value_at_time = MagicMock(return_value=0.5)
+    slot0.clip.automation_envelope = MagicMock(return_value=envelope)
+    slot0.clip.create_automation_envelope = MagicMock(return_value=envelope)
+    slot0.clip.clear_all_envelopes = MagicMock()
 
     # Slot 1: empty (for create_clip)
     slot1 = MagicMock()

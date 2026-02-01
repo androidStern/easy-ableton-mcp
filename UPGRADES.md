@@ -16,7 +16,7 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 
 ## Current easy-ableton-mcp Capabilities
 
-### What We Have (25 tools)
+### What We Have (30 tools)
 - `get_session_info` - tempo, signature, track count
 - `get_session_tree` - full recursive tree with devices/chains/pads
 - `get_track_info` - track details with clips and devices
@@ -39,6 +39,11 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 - `get_device_parameters` - list all params on device ✅ NEW
 - `set_device_parameter` - set param by index (normalized 0-1) ✅ NEW
 - `batch_set_device_parameters` - set multiple params at once ✅ NEW
+- `get_clip_envelope` - check if automation exists ✅ NEW
+- `create_automation_envelope` - create envelope for parameter ✅ NEW
+- `insert_envelope_point` - add automation point ✅ NEW
+- `get_envelope_value_at_time` - read automation value ✅ NEW
+- `clear_clip_envelopes` - clear all automation from clip ✅ NEW
 
 ### What We're Missing
 
@@ -157,35 +162,45 @@ def quantize_notes(self, track_index, clip_index, grid_size=0.25):
 
 ---
 
-## Priority 3: Automation & Envelopes
+## Priority 3: Automation & Envelopes ✅ DONE
 
-**Impact: MEDIUM-HIGH** - Critical for expressive music.
+**Status: IMPLEMENTED** - get_clip_envelope, create_automation_envelope, insert_envelope_point, get_envelope_value_at_time, clear_clip_envelopes
 
-### Features Needed
+### Features Implemented
 
-| Feature | Who Has It | Description |
-|---------|------------|-------------|
-| `get_clip_envelope` | itsuzef | Get automation data for param |
-| `add_clip_envelope_point` | itsuzef | Add automation point |
-| `clear_clip_envelope` | itsuzef | Clear all automation |
-| Parameter automation state | ableton-js | Check if param is automated |
+| Feature | Description |
+|---------|-------------|
+| `get_clip_envelope` | Check if automation exists for parameter |
+| `create_automation_envelope` | Create envelope for parameter (required before insert) |
+| `insert_envelope_point` | Add automation point (time, value, step_duration) |
+| `get_envelope_value_at_time` | Read automation value at specific time |
+| `clear_clip_envelopes` | Clear ALL automation from clip |
 
 ### API Pattern
 ```python
-# Get envelope for device parameter
-envelope = get_clip_envelope(track_index, clip_index, device_index, parameter_index)
+# Check if envelope exists
+envelope_info = get_clip_envelope(track_index, clip_index, device_index, parameter_index)
+# Returns: {has_envelope: true/false, parameter_name: "..."}
+
+# Create envelope if needed
+create_automation_envelope(track_index, clip_index, device_index, parameter_index)
 
 # Add point (time in beats, value 0-1)
-add_clip_envelope_point(track, clip, device, param, time=2.0, value=0.75)
+insert_envelope_point(track, clip, device, param, time=2.0, value=0.75)
 
-# Clear
-clear_clip_envelope(track, clip, device, param)
+# Read value
+get_envelope_value_at_time(track, clip, device, param, time=2.0)
+
+# Clear all automation from clip
+clear_clip_envelopes(track, clip)
 ```
 
 ### Implementation Notes
 - Envelopes are per-clip, per-parameter
-- Value range matches parameter's normalized range
-- Known to have bugs in some implementations (itsuzef notes this)
+- Must call `create_automation_envelope` before `insert_envelope_point` if envelope doesn't exist
+- `insert_step` takes 3 args: (time, value, step_duration) - use 0.0 for single point
+- `clear_clip_envelopes` clears ALL params, not just one (API limitation)
+- Cannot read or modify existing envelope points (API limitation)
 
 ---
 
@@ -437,10 +452,10 @@ unsubscribe()
 ### Phase 1: Core Gaps (High Impact)
 1. ~~**Device Parameters**~~ ✅ DONE - get/set params on any device
 2. ~~**MIDI Note Read/Edit**~~ ✅ DONE - get notes, delete, modify, transpose, quantize
-3. **Track Mixer** - volume, pan, mute, solo, arm ← NEXT
+3. ~~**Track Mixer**~~ ✅ DONE - volume, pan, mute, solo
 
 ### Phase 2: Creative Features
-4. **Automation** - envelope points, clear
+4. ~~**Automation**~~ ✅ DONE - create, insert, read, clear (cannot modify existing points)
 5. **Clip Properties** - loop, follow actions
 6. **Scene Management** - create, fire, delete
 
@@ -464,8 +479,8 @@ unsubscribe()
 | Get session tree | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Create MIDI track | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Create audio track | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Set track volume/pan | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
-| Set track mute/solo | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Set track volume/pan | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Set track mute/solo | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ |
 | Create clip | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Add notes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Get notes | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
@@ -475,8 +490,8 @@ unsubscribe()
 | Note probability | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Get device params | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Set device params | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Automation points | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Clear automation | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
+| Automation points | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Clear automation | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
 | Scene management | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Fire scene | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Clip loop control | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |

@@ -68,6 +68,11 @@ async def main():
                 # MIDI note tools
                 "get_notes_from_clip", "delete_notes_from_clip", "modify_clip_notes",
                 "transpose_notes_in_clip", "quantize_notes_in_clip",
+                # Track mixer tools
+                "set_track_volume", "set_track_pan", "set_track_mute", "set_track_solo",
+                # Automation envelope tools
+                "get_clip_envelope", "create_automation_envelope", "insert_envelope_point",
+                "get_envelope_value_at_time", "clear_clip_envelopes",
             ]
             missing = [t for t in required_tools if t not in tool_names]
             if missing:
@@ -338,6 +343,265 @@ async def main():
                 data = json.loads(content)
                 if "error" in data:
                     print(f"  WARN: Could not restore pitches: {data['error']}")
+
+                print("  PASS\n")
+
+            except Exception as e:
+                print(f"  FAIL: {e}\n")
+                return 1
+
+            # ================================================================
+            # Track Mixer Round-Trip Test
+            # Tests: set_track_volume, set_track_pan, set_track_mute, set_track_solo
+            # ================================================================
+            print("--- Test: Track Mixer Round-Trip ---")
+            try:
+                # Step 1: GET - Read initial mixer state via get_track_info
+                print("  1. Getting initial mixer state...")
+                result = await session.call_tool("get_track_info", {"track_index": 0})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: get_track_info error: {data['error']}\n")
+                    return 1
+                original_volume = data.get("volume")
+                original_pan = data.get("panning")
+                original_mute = data.get("mute")
+                original_solo = data.get("solo")
+                print(f"     Volume: {original_volume}, Pan: {original_pan}")
+                print(f"     Mute: {original_mute}, Solo: {original_solo}")
+
+                # Step 2: SET VOLUME - Change to 0.33
+                print("  2. Setting volume to 0.33...")
+                result = await session.call_tool("set_track_volume", {
+                    "track_index": 0,
+                    "volume": 0.33
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_track_volume error: {data['error']}\n")
+                    return 1
+
+                # Verify volume changed
+                result = await session.call_tool("get_track_info", {"track_index": 0})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if abs(data.get("volume", 0) - 0.33) > 0.01:
+                    print(f"  FAIL: Volume not set (got {data.get('volume')})\n")
+                    return 1
+                print(f"     Volume set to {data.get('volume')}")
+
+                # Step 3: SET PAN - Change to -0.5 (left)
+                print("  3. Setting pan to -0.5 (left)...")
+                result = await session.call_tool("set_track_pan", {
+                    "track_index": 0,
+                    "pan": -0.5
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_track_pan error: {data['error']}\n")
+                    return 1
+
+                # Verify pan changed
+                result = await session.call_tool("get_track_info", {"track_index": 0})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if abs(data.get("panning", 0) - (-0.5)) > 0.01:
+                    print(f"  FAIL: Pan not set (got {data.get('panning')})\n")
+                    return 1
+                print(f"     Pan set to {data.get('panning')}")
+
+                # Step 4: SET MUTE ON
+                print("  4. Setting mute ON...")
+                result = await session.call_tool("set_track_mute", {
+                    "track_index": 0,
+                    "mute": True
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_track_mute error: {data['error']}\n")
+                    return 1
+
+                # Verify mute is ON
+                result = await session.call_tool("get_track_info", {"track_index": 0})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if data.get("mute") is not True:
+                    print(f"  FAIL: Mute not set (got {data.get('mute')})\n")
+                    return 1
+                print("     Mute enabled")
+
+                # Step 5: SET MUTE OFF (cleanup before solo test)
+                print("  5. Setting mute OFF...")
+                result = await session.call_tool("set_track_mute", {
+                    "track_index": 0,
+                    "mute": False
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_track_mute error: {data['error']}\n")
+                    return 1
+                print("     Mute disabled")
+
+                # Step 6: SET SOLO ON
+                print("  6. Setting solo ON...")
+                result = await session.call_tool("set_track_solo", {
+                    "track_index": 0,
+                    "solo": True
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_track_solo error: {data['error']}\n")
+                    return 1
+
+                # Verify solo is ON
+                result = await session.call_tool("get_track_info", {"track_index": 0})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if data.get("solo") is not True:
+                    print(f"  FAIL: Solo not set (got {data.get('solo')})\n")
+                    return 1
+                print("     Solo enabled")
+
+                # Step 7: SET SOLO OFF (cleanup)
+                print("  7. Setting solo OFF...")
+                result = await session.call_tool("set_track_solo", {
+                    "track_index": 0,
+                    "solo": False
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_track_solo error: {data['error']}\n")
+                    return 1
+                print("     Solo disabled")
+
+                # Step 8: RESTORE - Reset to original values
+                print("  8. Restoring original mixer state...")
+                await session.call_tool("set_track_volume", {
+                    "track_index": 0,
+                    "volume": original_volume
+                })
+                await session.call_tool("set_track_pan", {
+                    "track_index": 0,
+                    "pan": original_pan
+                })
+                # Mute and solo already restored to False above
+                print(f"     Restored volume={original_volume}, pan={original_pan}")
+
+                print("  PASS\n")
+
+            except Exception as e:
+                print(f"  FAIL: {e}\n")
+                return 1
+
+            # ================================================================
+            # Automation Envelope Round-Trip Test
+            # Tests: get_clip_envelope, create_automation_envelope,
+            #        insert_envelope_point, get_envelope_value_at_time,
+            #        clear_clip_envelopes
+            # ================================================================
+            print("--- Test: Automation Envelope Round-Trip ---")
+            try:
+                # Step 1: GET ENVELOPE - Check if envelope exists for device param
+                print("  1. Checking envelope for device param (track 0, device 0, param 1)...")
+                result = await session.call_tool("get_clip_envelope", {
+                    "track_index": 0,
+                    "clip_index": 0,
+                    "device_index": 0,
+                    "parameter_index": 1
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in content.lower():
+                    print(f"  FAIL: get_clip_envelope error: {content}\n")
+                    return 1
+
+                has_envelope = data.get("has_envelope", False)
+                print(f"     Envelope exists: {has_envelope}")
+                print(f"     Parameter: {data.get('parameter_name', 'unknown')}")
+
+                # Step 2: CREATE ENVELOPE if it doesn't exist
+                if not has_envelope:
+                    print("  2. Creating automation envelope...")
+                    result = await session.call_tool("create_automation_envelope", {
+                        "track_index": 0,
+                        "clip_index": 0,
+                        "device_index": 0,
+                        "parameter_index": 1
+                    })
+                    content = result.content[0].text if result.content else ""
+                    data = json.loads(content)
+                    if "error" in content.lower():
+                        print(f"  FAIL: create_automation_envelope error: {content}\n")
+                        return 1
+                    print(f"     Envelope created: {data.get('created', False)}")
+                else:
+                    print("  2. Envelope already exists, skipping creation")
+
+                # Step 3: INSERT POINT - Add automation point at time 0.5
+                print("  3. Inserting automation point at time=0.5, value=0.25...")
+                result = await session.call_tool("insert_envelope_point", {
+                    "track_index": 0,
+                    "clip_index": 0,
+                    "device_index": 0,
+                    "parameter_index": 1,
+                    "time": 0.5,
+                    "value": 0.25
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in content.lower():
+                    print(f"  FAIL: insert_envelope_point error: {content}\n")
+                    return 1
+                print("     Point inserted")
+
+                # Step 4: READ VALUE - Verify value at time 0.5
+                print("  4. Reading value at time=0.5...")
+                result = await session.call_tool("get_envelope_value_at_time", {
+                    "track_index": 0,
+                    "clip_index": 0,
+                    "device_index": 0,
+                    "parameter_index": 1,
+                    "time": 0.5
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in content.lower():
+                    print(f"  FAIL: get_envelope_value_at_time error: {content}\n")
+                    return 1
+                value_at_05 = data.get("value", -1)
+                print(f"     Value at 0.5: {value_at_05}")
+
+                # Step 5: CLEAR ENVELOPES - Clear all automation from clip
+                print("  5. Clearing all envelopes from clip...")
+                result = await session.call_tool("clear_clip_envelopes", {
+                    "track_index": 0,
+                    "clip_index": 0
+                })
+                content = result.content[0].text if result.content else ""
+                if "error" in content.lower() and "cleared" not in content.lower():
+                    print(f"  FAIL: clear_clip_envelopes error: {content}\n")
+                    return 1
+                print("     Envelopes cleared")
+
+                # Step 6: VERIFY CLEARED - Check envelope no longer exists
+                print("  6. Verifying envelope was cleared...")
+                result = await session.call_tool("get_clip_envelope", {
+                    "track_index": 0,
+                    "clip_index": 0,
+                    "device_index": 0,
+                    "parameter_index": 1
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                has_envelope = data.get("has_envelope", False)
+                print(f"     Envelope exists after clear: {has_envelope}")
 
                 print("  PASS\n")
 

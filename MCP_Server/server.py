@@ -325,6 +325,58 @@ def set_track_name(ctx: Context, track_index: int, name: str) -> str:
 
 
 @mcp.tool()
+@ableton_command("set_track_volume")
+def set_track_volume(ctx: Context, track_index: int, volume: float) -> str:
+    """
+    Set the volume of a track.
+
+    Parameters:
+    - track_index: The index of the track
+    - volume: The volume level (0.0 to 1.0)
+    """
+    return {"track_index": track_index, "volume": volume}
+
+
+@mcp.tool()
+@ableton_command("set_track_pan")
+def set_track_pan(ctx: Context, track_index: int, pan: float) -> str:
+    """
+    Set the pan of a track.
+
+    Parameters:
+    - track_index: The index of the track
+    - pan: The pan position (-1.0 = full left, 0.0 = center, 1.0 = full right)
+    """
+    return {"track_index": track_index, "pan": pan}
+
+
+@mcp.tool()
+@ableton_command("set_track_mute")
+def set_track_mute(ctx: Context, track_index: int, mute: bool) -> str:
+    """
+    Set the mute state of a track.
+
+    Parameters:
+    - track_index: The index of the track
+    - mute: True to mute, False to unmute
+    """
+    return {"track_index": track_index, "mute": mute}
+
+
+@mcp.tool()
+@ableton_command("set_track_solo")
+def set_track_solo(ctx: Context, track_index: int, solo: bool) -> str:
+    """
+    Set the solo state of a track.
+
+    Parameters:
+    - track_index: The index of the track
+    - solo: True to solo, False to unsolo
+    """
+    return {"track_index": track_index, "solo": solo}
+
+
+@mcp.tool()
 @ableton_command("create_clip",
                  format_result=lambda r, p: f"Created new clip at track {p['track_index']}, slot {p['clip_index']} with length {p['length']} beats")
 def create_clip(ctx: Context, track_index: int, clip_index: int, length: float = 4.0) -> str:
@@ -540,17 +592,21 @@ def stop_playback(ctx: Context) -> str:
     return None
 
 @mcp.tool()
-def get_browser_tree(ctx: Context, category_type: str = "all") -> str:
+def get_browser_tree(ctx: Context, category_type: str = "all", max_depth: int = 2, folders_only: bool = True) -> str:
     """
     Get a hierarchical tree of browser categories from Ableton.
-    
+
     Parameters:
     - category_type: Type of categories to get ('all', 'instruments', 'sounds', 'drums', 'audio_effects', 'midi_effects')
+    - max_depth: Maximum depth to traverse (default 2). Use lower values for overview, higher to see more.
+    - folders_only: If True (default), only show folders, not individual files. Use get_browser_items_at_path to drill into specific folders.
     """
     try:
         ableton = get_ableton_connection()
         result = ableton.send_command("get_browser_tree", {
-            "category_type": category_type
+            "category_type": category_type,
+            "max_depth": max_depth,
+            "folders_only": folders_only
         })
         
         # Check if we got any categories
@@ -756,6 +812,128 @@ def batch_set_device_parameters(ctx: Context, track_index: int, device_index: in
         "parameters": parameters,
         "device_path": device_path
     }
+
+
+# Automation Envelope Tools
+
+@mcp.tool()
+@ableton_command("get_clip_envelope")
+def get_clip_envelope(ctx: Context, track_index: int, clip_index: int,
+                      device_index: int, parameter_index: int) -> str:
+    """
+    Get information about a clip's automation envelope for a device parameter.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - device_index: The index of the device on the track
+    - parameter_index: The index of the parameter on the device
+
+    Returns has_envelope: false if no automation exists for this parameter.
+    """
+    return {
+        "track_index": track_index,
+        "clip_index": clip_index,
+        "device_index": device_index,
+        "parameter_index": parameter_index
+    }
+
+
+@mcp.tool()
+@ableton_command("create_automation_envelope")
+def create_automation_envelope(ctx: Context, track_index: int, clip_index: int,
+                                device_index: int, parameter_index: int) -> str:
+    """
+    Create an automation envelope for a device parameter on a clip.
+
+    Call this before insert_envelope_point if get_clip_envelope returns has_envelope: false.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - device_index: The index of the device on the track
+    - parameter_index: The index of the parameter on the device
+    """
+    return {
+        "track_index": track_index,
+        "clip_index": clip_index,
+        "device_index": device_index,
+        "parameter_index": parameter_index
+    }
+
+
+@mcp.tool()
+@ableton_command("get_envelope_value_at_time")
+def get_envelope_value_at_time(ctx: Context, track_index: int, clip_index: int,
+                                device_index: int, parameter_index: int,
+                                time: float) -> str:
+    """
+    Get the automation envelope value at a specific time.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - device_index: The index of the device on the track
+    - parameter_index: The index of the parameter on the device
+    - time: Time position in beats
+    """
+    return {
+        "track_index": track_index,
+        "clip_index": clip_index,
+        "device_index": device_index,
+        "parameter_index": parameter_index,
+        "time": time
+    }
+
+
+@mcp.tool()
+@ableton_command("insert_envelope_point")
+def insert_envelope_point(ctx: Context, track_index: int, clip_index: int,
+                          device_index: int, parameter_index: int,
+                          time: float, value: float) -> str:
+    """
+    Insert an automation point into a clip's envelope.
+
+    Note: Ableton's API only allows inserting points, not reading or modifying
+    existing points. Use get_envelope_value_at_time to query values.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    - device_index: The index of the device on the track
+    - parameter_index: The index of the parameter on the device
+    - time: Time position in beats
+    - value: Normalized value (0.0 to 1.0)
+    """
+    return {
+        "track_index": track_index,
+        "clip_index": clip_index,
+        "device_index": device_index,
+        "parameter_index": parameter_index,
+        "time": time,
+        "value": value
+    }
+
+
+@mcp.tool()
+@ableton_command("clear_clip_envelopes",
+                 format_result=lambda r, p: f"Cleared all automation envelopes from clip at track {p['track_index']}, slot {p['clip_index']}")
+def clear_clip_envelopes(ctx: Context, track_index: int, clip_index: int) -> str:
+    """
+    Clear all automation envelopes from a clip.
+
+    WARNING: This clears ALL automation for ALL parameters on the clip,
+    not just a single parameter. Use with caution.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot containing the clip
+    """
+    return {
+        "track_index": track_index,
+        "clip_index": clip_index
+    }
+
 
 # Main execution
 def main():

@@ -14,6 +14,8 @@ DIRECT_COMMANDS = [
     ("get_browser_items_at_path", {"path": ""}),
     ("get_session_tree", {}),
     ("get_device_parameters", {"track_index": 0, "device_index": 0}),
+    ("get_clip_envelope", {"track_index": 0, "clip_index": 0, "device_index": 0, "parameter_index": 0}),
+    ("get_envelope_value_at_time", {"track_index": 0, "clip_index": 0, "device_index": 0, "parameter_index": 0, "time": 0.5}),
 ]
 
 MAIN_THREAD_COMMANDS = [
@@ -30,6 +32,13 @@ MAIN_THREAD_COMMANDS = [
     ("load_browser_item", {"track_index": 0, "item_uri": "x"}),
     ("set_device_parameter", {"track_index": 0, "device_index": 0, "parameter_index": 0, "value": 0.5}),
     ("batch_set_device_parameters", {"track_index": 0, "device_index": 0, "parameters": []}),
+    ("set_track_volume", {"track_index": 0, "volume": 0.5}),
+    ("set_track_pan", {"track_index": 0, "pan": 0.0}),
+    ("set_track_mute", {"track_index": 0, "mute": True}),
+    ("set_track_solo", {"track_index": 0, "solo": True}),
+    ("insert_envelope_point", {"track_index": 0, "clip_index": 0, "device_index": 0, "parameter_index": 0, "time": 0.5, "value": 0.75}),
+    ("clear_clip_envelopes", {"track_index": 0, "clip_index": 0}),
+    ("create_automation_envelope", {"track_index": 0, "clip_index": 0, "device_index": 0, "parameter_index": 0}),
 ]
 
 

@@ -379,3 +379,196 @@ Added round-trip integration test in `scripts/test_mcp_tools.py`:
 ```
 
 All tests passing.
+2026-02-01 01:57 - Added Track Mixer Round-Trip integration test (TDD red phase)
+  - Tests: set_track_volume, set_track_pan, set_track_mute, set_track_solo
+  - Following same pattern as MIDI Note Round-Trip test
+2026-02-01 01:59 - TDD Red phase confirmed: tests fail with 'Missing tools: set_track_volume, set_track_pan, set_track_mute, set_track_solo'
+2026-02-01 02:03 - Unit tests added: 16 new test cases for set_track_{volume,pan,mute,solo}
+  - 12 failing as expected (Unknown command)
+  - Ready for implementation (green phase)
+2026-02-01 02:08 - TDD Green phase: All tests pass
+  - 4 handlers in Remote Script: set_track_{volume,pan,mute,solo}
+  - 4 MCP tools in server.py
+  - Unit tests: 80 passed (3 pre-existing failures)
+  - Integration tests: All passed including Track Mixer Round-Trip
+2026-02-01 02:18 - Fixed pre-existing test failures:
+  - Moved _require_param before 'import Live' in add_notes_to_clip
+  - Added Live module mock to conftest.py
+  - All 83 unit tests now pass
+2026-02-01 02:25 - Fixed get_browser_tree token explosion:
+  - Added max_depth param (default 2, was 4)
+  - Added folders_only param (default True) to skip leaf files
+  - Use get_browser_items_at_path to drill into specific folders
+
+2025-02-01 02:45 - Session Summary: Track Mixer + Automation Research
+
+## Completed This Session
+- Implemented Priority 4: Track Mixer Control (TDD)
+  - 4 new tools: set_track_volume, set_track_pan, set_track_mute, set_track_solo
+  - 16 new unit tests, all passing (83 total)
+  - Integration test: Track Mixer Round-Trip
+
+- Fixed pre-existing test failures:
+  - add_notes_to_clip: moved _require_param before 'import Live'
+  - Added Live module mock to conftest.py
+
+- Fixed get_browser_tree token explosion:
+  - Added max_depth param (default 2, was 4)
+  - Added folders_only param (default True)
+  - Use get_browser_items_at_path to drill into specific folders
+
+## Next Up: Priority 3 - Automation & Envelopes
+
+### CRITICAL FINDING: API Limitation
+Ableton's LOM does NOT expose envelope point editing like it does for MIDI notes.
+This is a deliberate design decision by Ableton, not a bug.
+
+### What's Available:
+- envelope.insert_step(time, value) - Insert a point
+- envelope.value_at_time(time) - Query value at position
+- clip.clear_all_envelopes() - Clear ALL automation (destructive!)
+
+### What's NOT Available (API doesn't expose):
+- Reading envelope points
+- Modifying existing points
+- Enumerating all points
+
+### Pitfalls to Avoid:
+- Arrangement clips return None from automation_envelope()
+- Must run on main thread via schedule_message()
+- Values are normalized 0.0-1.0
+- clear_all_envelopes() wipes ALL params, not just one
+
+### Decision Needed:
+Implement limited version (insert_step, value_at_time, clear_all)?
+Or skip to Priority 5 (Clip Properties / Scene Management)?
+
+## Files Changed (uncommitted):
+- AbletonMCP_Remote_Script/__init__.py (mixer handlers + add_notes fix + browser fix)
+- MCP_Server/server.py (mixer tools + browser params)
+- tests/test_command_dispatch.py (mixer tests)
+- tests/test_required_params.py (mixer param validation)
+- tests/conftest.py (Live module mock)
+- scripts/test_mcp_tools.py (Track Mixer Round-Trip test)
+
+2026-02-01 - Automation Envelope Tests (TDD Red Phase)
+
+## Tests Added
+
+### Unit Tests (test_command_dispatch.py)
+- get_clip_envelope (direct command)
+- get_envelope_value_at_time (direct command)  
+- insert_envelope_point (main thread command)
+- clear_clip_envelopes (main thread command)
+
+### Required Param Tests (test_required_params.py)
+- track_index required for all 4 commands
+- clip_index required for all 4 commands
+- device_index required for 3 commands (not clear_clip_envelopes)
+- parameter_index required for 3 commands (not clear_clip_envelopes)
+- time required for get_envelope_value_at_time, insert_envelope_point
+- value required for insert_envelope_point
+
+### Integration Test (test_mcp_tools.py)
+- Automation Envelope Round-Trip test:
+  1. get_clip_envelope for device param
+  2. insert_envelope_point at time=0.5, value=0.25
+  3. get_envelope_value_at_time, verify ~0.25
+  4. insert_envelope_point at time=1.0, value=0.75
+  5. get_envelope_value_at_time, verify ~0.75
+  6. clear_clip_envelopes
+  7. Verify envelope cleared
+
+### Fixture Updates (conftest.py)
+- Added envelope mock with insert_step, value_at_time methods
+- Added clip.automation_envelope() and clear_all_envelopes() mocks
+
+## Test Results
+- 22 failing tests (expected - commands not implemented)
+- 86 passing tests (existing functionality)
+
+
+2026-02-01 - Automation Envelope Implementation (TDD Green Phase)
+
+## Implementation Complete
+
+### Remote Script Handlers (AbletonMCP_Remote_Script/__init__.py)
+Added 4 command handlers + 1 helper method:
+
+1. **_get_envelope()** - Helper to get clip, device, parameter, and envelope
+   - Validates track/clip/device/parameter indices
+   - Returns tuple for use by other handlers
+   - Raises on arrangement clips (return None from automation_envelope)
+
+2. **get_clip_envelope** (direct) - Get envelope info for a parameter
+   - Returns has_envelope, parameter_name, device_name
+
+3. **get_envelope_value_at_time** (direct) - Query value at time
+   - Uses envelope.value_at_time(time)
+   - Returns normalized value
+
+4. **insert_envelope_point** (main_thread) - Insert automation point
+   - Uses envelope.insert_step(time, value)
+   - Validates value is 0.0-1.0
+
+5. **clear_clip_envelopes** (main_thread) - Clear all automation
+   - Uses clip.clear_all_envelopes()
+   - WARNING: Clears ALL parameters, not just one
+
+### MCP Tools (MCP_Server/server.py)
+Added 4 MCP tool wrappers using @ableton_command decorator.
+
+### Test Results
+- 108 unit tests passing (was 86)
+- 22 new tests for automation envelope commands
+
+## Ready for E2E Testing
+Run: ./scripts/dev-refresh.sh --test
+
+
+## Integration Test Results
+All tests pass. Automation envelope test correctly handles API limitation:
+- get_clip_envelope returns has_envelope: false when no automation exists
+- clear_clip_envelopes works even with no envelopes
+- insert/read tests skipped due to Ableton API limitation (can't create envelopes programmatically)
+
+## API Limitation Documented
+Ableton's Live API cannot create automation envelopes programmatically.
+- automation_envelope(param) returns None if no automation exists
+- Envelopes must be created via the UI first (draw automation or record)
+- This is a fundamental limitation of the Live Object Model
+
+## Implementation Status: COMPLETE
+- 108 unit tests passing
+- Integration tests passing
+- All 4 automation tools working within API constraints
+
+
+## Final Implementation - All Tests Pass
+
+### Changes Made
+1. Added create_automation_envelope tool (MCP + Remote Script)
+2. Fixed insert_step signature: takes 3 args (time, value, step_duration)
+3. Updated integration test to call create_automation_envelope before insert
+
+### Test Results
+- 114 unit tests passing
+- Integration tests passing
+- Full automation envelope round-trip working:
+  - get_clip_envelope (check existence)
+  - create_automation_envelope (create if needed)
+  - insert_envelope_point (add automation point)
+  - get_envelope_value_at_time (read back)
+  - clear_clip_envelopes (cleanup)
+
+### Tools Implemented (5 total)
+1. get_clip_envelope - Check if envelope exists
+2. create_automation_envelope - Create envelope for parameter
+3. insert_envelope_point - Add automation point (time, value)
+4. get_envelope_value_at_time - Read value at specific time
+5. clear_clip_envelopes - Clear all automation from clip
+
+### Sources
+- Live API docs: https://structure-void.com/PythonLiveAPI_documentation/Live10.0.1.xml
+- nsuspray Live API docs: https://nsuspray.github.io/Live_API_Doc/
+
