@@ -210,22 +210,16 @@ Also added 5-second connect timeout and `_cleanup_socket()` helper.
 
 ---
 
-### 6. Generic Exception Raised
+### 6. Generic Exception Raised ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Location**: `MCP_Server/server.py:73-75`
+**Fix**: Added custom exception types:
+- `AbletonCommandError` - Ableton returned an error status
+- `AbletonResponseError` - Invalid/unparseable JSON response
+- `ConnectionError` - Re-raised as-is (built-in, already descriptive)
 
-```python
-if response.get("status") == "error":
-    logger.error(f"Ableton error: {response.get('message')}")
-    raise Exception(response.get("message", "Unknown error from Ableton"))
-```
-
-**Problem**:
-- Uses bare `Exception` instead of a custom error type
-- Cannot distinguish Ableton command errors from connection errors, parse errors, etc.
-- Callers cannot catch specific error types for different handling
+**Location**: `MCP_Server/server.py:15-23` (definitions), `server.py:114-126` (usage)
 
 ---
 

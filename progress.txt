@@ -177,6 +177,22 @@ TDD approach:
 
 ---
 
+## COMPLETED: CODE_REVIEW.md Issue #6 - Generic Exception Raised
+
+### Problem
+Used bare `Exception` for all errors - callers couldn't distinguish error types.
+
+### Solution
+Added custom exception types:
+- `AbletonCommandError` - Ableton returned an error status
+- `AbletonResponseError` - Invalid/unparseable JSON response
+- `ConnectionError` - Re-raised as-is (built-in, already descriptive)
+
+### Test Results
+- 67 tests passing
+
+---
+
 ## COMPLETED: CODE_REVIEW.md Issue #5 - Broad except Exception in Connection
 
 ### Problem

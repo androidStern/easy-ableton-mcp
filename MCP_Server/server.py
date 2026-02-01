@@ -11,6 +11,18 @@ from typing import AsyncIterator, Dict, Any, List, Union, Callable, Optional
 from .protocol import send_message, recv_message
 from .ableton_process import ensure_ableton_running, AbletonTCPNotReadyError, AbletonLaunchError
 
+
+# Custom exceptions for Ableton communication errors
+class AbletonCommandError(Exception):
+    """Ableton executed the command but returned an error status."""
+    pass
+
+
+class AbletonResponseError(Exception):
+    """Ableton returned an invalid or unparseable response."""
+    pass
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -103,17 +115,17 @@ class AbletonConnection:
 
             if response.get("status") == "error":
                 logger.error(f"Ableton error: {response.get('message')}")
-                raise Exception(response.get("message", "Unknown error from Ableton"))
+                raise AbletonCommandError(response.get("message", "Unknown error from Ableton"))
 
             return response.get("result", {})
         except ConnectionError as e:
             logger.error(f"Socket connection error: {str(e)}")
             self.sock = None
-            raise Exception(f"Connection to Ableton lost: {str(e)}")
+            raise  # Re-raise ConnectionError as-is, it's already descriptive
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON response from Ableton: {str(e)}")
             self.sock = None
-            raise Exception(f"Invalid response from Ableton: {str(e)}")
+            raise AbletonResponseError(f"Invalid response from Ableton: {str(e)}")
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
