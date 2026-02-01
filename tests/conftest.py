@@ -112,7 +112,19 @@ def mcp():
 
     song.tracks = [track]
     song.return_tracks = []
-    song.scenes = []
+
+    # Mock scenes for scene management tests
+    scene0 = MagicMock()
+    scene0.name = "Scene 1"
+    scene0.fire = MagicMock()
+
+    scene1 = MagicMock()
+    scene1.name = "Scene 2"
+    scene1.fire = MagicMock()
+
+    song.scenes = [scene0, scene1]
+    song.create_scene = MagicMock()
+    song.delete_scene = MagicMock()
 
     instance._song = song
 

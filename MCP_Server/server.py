@@ -935,6 +935,77 @@ def clear_clip_envelopes(ctx: Context, track_index: int, clip_index: int) -> str
     }
 
 
+# Scene Management Tools
+
+@mcp.tool()
+@ableton_command("get_scenes_info")
+def get_scenes_info(ctx: Context) -> str:
+    """
+    Get information about all scenes in the session.
+
+    Returns JSON with scene_count and scenes array, each scene having:
+    index, name
+    """
+    return None
+
+
+@mcp.tool()
+@ableton_command("create_scene")
+def create_scene(ctx: Context, index: int = -1) -> str:
+    """
+    Create a new scene in the session.
+
+    Parameters:
+    - index: The index to insert the scene at (-1 = end of list)
+
+    Returns JSON with the new scene's index and name.
+    """
+    return {"index": index}
+
+
+@mcp.tool()
+@ableton_command("delete_scene")
+def delete_scene(ctx: Context, scene_index: int) -> str:
+    """
+    Delete a scene from the session.
+
+    Parameters:
+    - scene_index: The index of the scene to delete
+
+    Returns JSON confirming deletion with deleted, index, and name.
+    """
+    return {"scene_index": scene_index}
+
+
+@mcp.tool()
+@ableton_command("set_scene_name")
+def set_scene_name(ctx: Context, scene_index: int, name: str) -> str:
+    """
+    Set the name of a scene.
+
+    Parameters:
+    - scene_index: The index of the scene to rename
+    - name: The new name for the scene
+
+    Returns JSON with the scene's index and new name.
+    """
+    return {"scene_index": scene_index, "name": name}
+
+
+@mcp.tool()
+@ableton_command("fire_scene")
+def fire_scene(ctx: Context, scene_index: int) -> str:
+    """
+    Fire (launch) a scene, triggering all clips in that row.
+
+    Parameters:
+    - scene_index: The index of the scene to fire
+
+    Returns JSON confirming fired status with index and name.
+    """
+    return {"scene_index": scene_index}
+
+
 # Main execution
 def main():
     """Run the MCP server or perform installation."""

@@ -572,3 +572,21 @@ Ableton's Live API cannot create automation envelopes programmatically.
 - Live API docs: https://structure-void.com/PythonLiveAPI_documentation/Live10.0.1.xml
 - nsuspray Live API docs: https://nsuspray.github.io/Live_API_Doc/
 
+
+## 2026-02-01: Scene Management (Priority 5)
+
+Implemented 5 scene management tools:
+- `get_scenes_info` - read-only, returns scene_count + scenes array
+- `create_scene` - main_thread, creates at index (-1 = end)
+- `delete_scene` - main_thread, deletes by index
+- `set_scene_name` - main_thread, renames scene
+- `fire_scene` - main_thread, launches scene
+
+Files changed:
+- `AbletonMCP_Remote_Script/__init__.py` - Added handlers + `_get_scene()` helper
+- `MCP_Server/server.py` - Added MCP tool definitions
+- `tests/test_command_dispatch.py` - Added to DIRECT/MAIN_THREAD command lists
+- `tests/conftest.py` - Added scene mocks
+- `scripts/test_mcp_tools.py` - Added Scene Management Round-Trip Test
+
+All 70 unit tests pass. E2E tests pass.

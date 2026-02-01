@@ -1695,7 +1695,144 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error in get_session_tree: " + str(e))
             self.log_message(traceback.format_exc())
             raise
-    
+
+    # Scene Management Commands
+
+    def _get_scene(self, scene_index):
+        """Validate scene_index and return the scene."""
+        if scene_index < 0 or scene_index >= len(self._song.scenes):
+            raise IndexError("Scene index out of range")
+        return self._song.scenes[scene_index]
+
+    @commands.register("get_scenes_info")
+    def _get_scenes_info(self):
+        """Get information about all scenes."""
+        try:
+            scenes = []
+            for i, scene in enumerate(self._song.scenes):
+                scenes.append({
+                    "index": i,
+                    "name": scene.name
+                })
+
+            return {
+                "scene_count": len(self._song.scenes),
+                "scenes": scenes
+            }
+        except Exception as e:
+            self.log_message("Error getting scenes info: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("create_scene", main_thread=True)
+    def _create_scene(self, index=-1):
+        """Create a new scene at the specified index.
+
+        Args:
+            index: Index to insert the scene at (-1 = end of list)
+
+        Returns:
+            Dictionary with the new scene's index and name
+        """
+        try:
+            # Create the scene
+            self._song.create_scene(index)
+
+            # Get the new scene index
+            new_scene_index = len(self._song.scenes) - 1 if index == -1 else index
+            new_scene = self._song.scenes[new_scene_index]
+
+            return {
+                "index": new_scene_index,
+                "name": new_scene.name
+            }
+        except Exception as e:
+            self.log_message("Error creating scene: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("delete_scene", main_thread=True)
+    def _delete_scene(self, scene_index=None):
+        """Delete a scene.
+
+        Args:
+            scene_index: Index of the scene to delete
+
+        Returns:
+            Dictionary confirming the deletion
+        """
+        try:
+            scene_index = self._require_param("scene_index", scene_index)
+
+            if scene_index < 0 or scene_index >= len(self._song.scenes):
+                raise IndexError("Scene index out of range")
+
+            # Store scene name before deletion
+            scene_name = self._song.scenes[scene_index].name
+
+            # Delete the scene
+            self._song.delete_scene(scene_index)
+
+            return {
+                "deleted": True,
+                "index": scene_index,
+                "name": scene_name
+            }
+        except Exception as e:
+            self.log_message("Error deleting scene: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("set_scene_name", main_thread=True)
+    def _set_scene_name(self, scene_index=None, name=""):
+        """Set the name of a scene.
+
+        Args:
+            scene_index: Index of the scene to rename
+            name: New name for the scene
+
+        Returns:
+            Dictionary with the new name
+        """
+        try:
+            scene_index = self._require_param("scene_index", scene_index)
+            scene = self._get_scene(scene_index)
+            scene.name = name
+
+            return {
+                "index": scene_index,
+                "name": scene.name
+            }
+        except Exception as e:
+            self.log_message("Error setting scene name: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("fire_scene", main_thread=True)
+    def _fire_scene(self, scene_index=None):
+        """Fire (launch) a scene.
+
+        Args:
+            scene_index: Index of the scene to fire
+
+        Returns:
+            Dictionary confirming the scene was fired
+        """
+        try:
+            scene_index = self._require_param("scene_index", scene_index)
+            scene = self._get_scene(scene_index)
+            scene.fire()
+
+            return {
+                "fired": True,
+                "index": scene_index,
+                "name": scene.name
+            }
+        except Exception as e:
+            self.log_message("Error firing scene: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
     @commands.register("get_browser_tree")
     def get_browser_tree(self, category_type="all", max_depth=2, folders_only=True):
         """

@@ -73,6 +73,8 @@ async def main():
                 # Automation envelope tools
                 "get_clip_envelope", "create_automation_envelope", "insert_envelope_point",
                 "get_envelope_value_at_time", "clear_clip_envelopes",
+                # Scene management tools
+                "get_scenes_info", "create_scene", "delete_scene", "set_scene_name", "fire_scene",
             ]
             missing = [t for t in required_tools if t not in tool_names]
             if missing:
@@ -602,6 +604,119 @@ async def main():
                 data = json.loads(content)
                 has_envelope = data.get("has_envelope", False)
                 print(f"     Envelope exists after clear: {has_envelope}")
+
+                print("  PASS\n")
+
+            except Exception as e:
+                print(f"  FAIL: {e}\n")
+                return 1
+
+            # ================================================================
+            # Scene Management Round-Trip Test
+            # Tests: get_scenes_info, create_scene, set_scene_name, fire_scene, delete_scene
+            # ================================================================
+            print("--- Test: Scene Management Round-Trip ---")
+            try:
+                # Step 1: GET SCENES INFO - Read initial scene state
+                print("  1. Getting initial scene info...")
+                result = await session.call_tool("get_scenes_info", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: get_scenes_info error: {data['error']}\n")
+                    return 1
+                initial_scene_count = data.get("scene_count", 0)
+                print(f"     Found {initial_scene_count} existing scenes")
+
+                # Step 2: CREATE SCENE - Create a new scene at the end
+                print("  2. Creating new scene...")
+                result = await session.call_tool("create_scene", {
+                    "index": -1  # -1 means end of list
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: create_scene error: {data['error']}\n")
+                    return 1
+                new_scene_index = data.get("index")
+                print(f"     Created scene at index {new_scene_index}")
+
+                # Step 3: VERIFY SCENE COUNT - Confirm scene was added
+                print("  3. Verifying scene was added...")
+                result = await session.call_tool("get_scenes_info", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                new_scene_count = data.get("scene_count", 0)
+                if new_scene_count != initial_scene_count + 1:
+                    print(f"  FAIL: Expected {initial_scene_count + 1} scenes, got {new_scene_count}\n")
+                    return 1
+                print(f"     Scene count: {new_scene_count}")
+
+                # Step 4: SET SCENE NAME - Rename the new scene
+                print("  4. Renaming scene to 'MCP Test Scene'...")
+                result = await session.call_tool("set_scene_name", {
+                    "scene_index": new_scene_index,
+                    "name": "MCP Test Scene"
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_scene_name error: {data['error']}\n")
+                    return 1
+                print(f"     Renamed to: {data.get('name', 'unknown')}")
+
+                # Step 5: VERIFY NAME - Confirm name was set
+                print("  5. Verifying scene name...")
+                result = await session.call_tool("get_scenes_info", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                scenes = data.get("scenes", [])
+                test_scene = next((s for s in scenes if s.get("index") == new_scene_index), None)
+                if not test_scene or test_scene.get("name") != "MCP Test Scene":
+                    print(f"  FAIL: Scene name not set (got {test_scene.get('name') if test_scene else 'None'})\n")
+                    return 1
+                print("     Name verified")
+
+                # Step 6: FIRE SCENE - Launch the scene
+                print("  6. Firing scene...")
+                result = await session.call_tool("fire_scene", {
+                    "scene_index": new_scene_index
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: fire_scene error: {data['error']}\n")
+                    return 1
+                print("     Scene fired")
+
+                # Step 7: STOP PLAYBACK - Stop the scene (cleanup before delete)
+                print("  7. Stopping playback...")
+                result = await session.call_tool("stop_playback", {})
+                content = result.content[0].text if result.content else ""
+                print("     Playback stopped")
+
+                # Step 8: DELETE SCENE - Remove the test scene
+                print("  8. Deleting test scene...")
+                result = await session.call_tool("delete_scene", {
+                    "scene_index": new_scene_index
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: delete_scene error: {data['error']}\n")
+                    return 1
+                print("     Scene deleted")
+
+                # Step 9: VERIFY DELETION - Confirm scene count is back to original
+                print("  9. Verifying scene was deleted...")
+                result = await session.call_tool("get_scenes_info", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                final_scene_count = data.get("scene_count", 0)
+                if final_scene_count != initial_scene_count:
+                    print(f"  FAIL: Expected {initial_scene_count} scenes, got {final_scene_count}\n")
+                    return 1
+                print(f"     Scene count restored to {final_scene_count}")
 
                 print("  PASS\n")
 

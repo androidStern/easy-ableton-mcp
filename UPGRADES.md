@@ -16,19 +16,21 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 
 ## Current easy-ableton-mcp Capabilities
 
-### What We Have (30 tools)
+### What We Have (39 tools)
 - `get_session_info` - tempo, signature, track count
 - `get_session_tree` - full recursive tree with devices/chains/pads
 - `get_track_info` - track details with clips and devices
 - `create_midi_track` - create track at index
 - `set_track_name` - rename track
+- `set_track_volume` / `set_track_pan` - mixer controls
+- `set_track_mute` / `set_track_solo` - mixer states
 - `create_clip` - create MIDI clip
 - `add_notes_to_clip` - add notes (Live 11+ API with MidiNoteSpecification)
-- `get_notes_from_clip` - read notes with IDs ✅ NEW
-- `delete_notes_from_clip` - delete by ID ✅ NEW
-- `modify_clip_notes` - edit velocity, probability, etc. ✅ NEW
-- `transpose_notes_in_clip` - shift by semitones ✅ NEW
-- `quantize_notes_in_clip` - snap to grid ✅ NEW
+- `get_notes_from_clip` - read notes with IDs
+- `delete_notes_from_clip` - delete by ID
+- `modify_clip_notes` - edit velocity, probability, etc.
+- `transpose_notes_in_clip` - shift by semitones
+- `quantize_notes_in_clip` - snap to grid
 - `set_clip_name` - rename clip
 - `fire_clip` / `stop_clip` - clip playback control
 - `start_playback` / `stop_playback` - transport control
@@ -36,18 +38,23 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 - `load_instrument_or_effect` - load by URI
 - `load_drum_kit` - load drum rack + kit
 - `get_browser_tree` / `get_browser_items_at_path` - browser navigation
-- `get_device_parameters` - list all params on device ✅ NEW
-- `set_device_parameter` - set param by index (normalized 0-1) ✅ NEW
-- `batch_set_device_parameters` - set multiple params at once ✅ NEW
-- `get_clip_envelope` - check if automation exists ✅ NEW
-- `create_automation_envelope` - create envelope for parameter ✅ NEW
-- `insert_envelope_point` - add automation point ✅ NEW
-- `get_envelope_value_at_time` - read automation value ✅ NEW
-- `clear_clip_envelopes` - clear all automation from clip ✅ NEW
+- `get_device_parameters` - list all params on device
+- `set_device_parameter` - set param by index (normalized 0-1)
+- `batch_set_device_parameters` - set multiple params at once
+- `get_clip_envelope` - check if automation exists
+- `create_automation_envelope` - create envelope for parameter
+- `insert_envelope_point` - add automation point
+- `get_envelope_value_at_time` - read automation value
+- `clear_clip_envelopes` - clear all automation from clip
+- `get_scenes_info` - get all scene metadata ✅ NEW
+- `create_scene` - create scene at index ✅ NEW
+- `delete_scene` - delete scene ✅ NEW
+- `set_scene_name` - rename scene ✅ NEW
+- `fire_scene` - launch entire scene ✅ NEW
 
 ### What We're Missing
 
-Priorities 3+ below.
+Priorities 6+ below.
 
 ---
 
@@ -233,19 +240,24 @@ track.send_a = 0.5         # Send level to return A
 
 ---
 
-## Priority 5: Scene Management
+## Priority 5: Scene Management ✅ DONE
 
-**Impact: MEDIUM** - Session view workflow.
+**Status: IMPLEMENTED** - get_scenes_info, create_scene, delete_scene, set_scene_name, fire_scene
 
-### Features Needed
+### Features Implemented
+
+| Feature | Description |
+|---------|-------------|
+| `get_scenes_info` | Get all scene metadata (index, name) |
+| `create_scene` | Create new scene at index (-1 = end) |
+| `delete_scene` | Delete scene by index |
+| `set_scene_name` | Rename scene |
+| `fire_scene` | Launch entire scene |
+
+### Not Implemented
 
 | Feature | Who Has It | Description |
 |---------|------------|-------------|
-| `create_scene` | itsuzef, ableton-js | Create new scene |
-| `delete_scene` | itsuzef, ableton-js | Delete scene |
-| `set_scene_name` | itsuzef, ableton-js | Rename scene |
-| `fire_scene` | itsuzef, ableton-js, pylive | Launch entire scene |
-| `get_scenes_info` | itsuzef | Get all scene metadata |
 | `duplicate_scene` | ableton-js | Clone scene |
 
 ---
@@ -456,8 +468,8 @@ unsubscribe()
 
 ### Phase 2: Creative Features
 4. ~~**Automation**~~ ✅ DONE - create, insert, read, clear (cannot modify existing points)
-5. **Clip Properties** - loop, follow actions
-6. **Scene Management** - create, fire, delete
+5. ~~**Scene Management**~~ ✅ DONE - get info, create, delete, rename, fire
+6. **Clip Properties** - loop, follow actions
 
 ### Phase 3: Audio & Polish
 7. **Audio Tracks** - create, import files
@@ -492,8 +504,8 @@ unsubscribe()
 | Set device params | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Automation points | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Clear automation | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
-| Scene management | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
-| Fire scene | ❌ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Scene management | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Fire scene | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Clip loop control | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Follow actions | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Load device by URI | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
