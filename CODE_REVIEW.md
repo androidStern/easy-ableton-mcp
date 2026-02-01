@@ -273,94 +273,29 @@ Updated 3 call sites to use helpers.
 
 ---
 
-### 11. Repeated Normalization Formula
+### 11. Repeated Normalization Formula ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE (fixed as part of Issue #8)
 
-**Locations** in `AbletonMCP_Remote_Script/__init__.py`:
-
-```python
-# Line 843-844 (in _get_device_parameters)
-if (p.max - p.min) != 0:
-    norm_val = (p.value - p.min) / (p.max - p.min)
-
-# Line 894 (in _set_device_parameter) - inverse formula
-actual_value = parameter.min + value * (parameter.max - parameter.min)
-
-# Line 944 (in _batch_set_device_parameters) - same inverse formula
-actual_val = param.min + val_norm * (param.max - param.min)
-```
-
-**Problem**: Three locations with the normalization/denormalization formula. Changes to the formula require updating multiple locations.
+**Fix**: Extracted `_normalize_param_value()` and `_denormalize_param_value()` helpers.
 
 ---
 
-### 12. Identical Browser Error-Checking
+### 12. Identical Browser Error-Checking ⏭️ SKIPPED
 
-**Status**: CONFIRMED
+**Status**: SKIPPED
 
-**Locations**: `MCP_Server/server.py:489-500` and `server.py:524-541`
-
-```python
-# In get_browser_tree (489-500)
-except Exception as e:
-    error_msg = str(e)
-    if "Browser is not available" in error_msg:
-        logger.error(f"Browser is not available in Ableton: {error_msg}")
-        return "Error: The Ableton browser is not available..."
-    elif "Could not access Live application" in error_msg:
-        logger.error(f"Could not access Live application: {error_msg}")
-        return "Error: Could not access the Ableton Live application..."
-    else:
-        logger.error(f"Error getting browser tree: {error_msg}")
-        return f"Error getting browser tree: {error_msg}"
-
-# In get_browser_items_at_path (524-541)
-except Exception as e:
-    error_msg = str(e)
-    if "Browser is not available" in error_msg:
-        logger.error(f"Browser is not available in Ableton: {error_msg}")
-        return "Error: The Ableton browser is not available..."
-    elif "Could not access Live application" in error_msg:
-        logger.error(f"Could not access Live application: {error_msg}")
-        return "Error: Could not access the Ableton Live application..."
-    elif "Unknown or unavailable category" in error_msg:
-        # ...
-    # ... more elif branches
-```
-
-**Problem**: Near-identical error handling blocks repeated in two functions. The `get_browser_items_at_path` version has additional cases.
+**Reason**: The user-friendly error messages ("Make sure Ableton Live is fully loaded...") provide valuable UX. Converting to @ableton_command decorator would lose these hints. Only 2 functions affected - not worth the UX regression.
 
 ---
 
-### 13. Platform Detection Uncached
+### 13. Platform Detection Uncached ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Location**: `MCP_Server/platform.py:42-55`
+**Fix**: Added `@lru_cache(maxsize=1)` to `get_platform()`.
 
-```python
-def get_platform() -> Platform:
-    """Detect and return the current platform."""
-    platform_str = sys.platform
-    for platform in Platform:
-        if platform.value == platform_str:
-            return platform
-    raise UnsupportedPlatformError(platform_str)
-```
-
-**Call sites** (all in `ableton_process.py`):
-- Line 67, 80-81 in `is_ableton_running()`
-- Line 141-142 in `quit_ableton_gracefully()`
-- Line 201-202 in `wait_for_ableton_quit()`
-- Line 237-238 in `quit_ableton_and_wait()`
-- Line 257 in `ensure_ableton_closed()`
-- Line 299-300 in `launch_ableton()`
-- Line 411-412 in `ensure_ableton_running()`
-
-Each call re-evaluates `sys.platform` and iterates the enum. While fast, this is unnecessary computation that could be cached.
-
-**Note**: The `platform` parameter pattern (accepting `Platform | None`) means many functions call `get_platform()` at runtime.
+**Location**: `MCP_Server/platform.py:43`
 
 ---
 

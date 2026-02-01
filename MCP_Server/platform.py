@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,7 @@ class AbletonNotFoundError(Exception):
     pass
 
 
+@lru_cache(maxsize=1)
 def get_platform() -> Platform:
     """Detect and return the current platform.
 
