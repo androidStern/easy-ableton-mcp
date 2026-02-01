@@ -223,34 +223,15 @@ Also added 5-second connect timeout and `_cleanup_socket()` helper.
 
 ---
 
-### 7. `taskkill` Without Timeout on Windows
+### 7. `taskkill` Without Timeout on Windows ✅ COMPLETE
 
-**Status**: CONFIRMED
+**Status**: COMPLETE
 
-**Location**: `MCP_Server/ableton_process.py:166-178`
+**Fix**: Added `timeout=10.0` to quit subprocess calls:
+- `_quit_ableton_windows()`: taskkill now has 10s timeout
+- `_quit_ableton_macos()`: osascript now has 10s timeout
 
-```python
-def _quit_ableton_windows() -> None:
-    """Gracefully quit Ableton Live on Windows.
-
-    Uses taskkill without /F to send WM_CLOSE, which triggers the normal
-    quit behavior including save dialogs.
-    """
-    subprocess.run(
-        ["taskkill", "/IM", "Ableton Live*.exe"],
-        capture_output=True,
-        text=True,
-        # Don't check=True here because taskkill returns non-zero if no
-        # matching process is found, but that's not an error for our use case.
-    )
-```
-
-**Problem**:
-- `subprocess.run()` has no `timeout` parameter specified
-- If `taskkill` hangs (e.g., waiting for system resources), the caller blocks indefinitely
-- Other subprocess calls in the file (e.g., line 98, 113, 158, 317, 336) also lack timeouts
-
-**Context**: The `wait_for_ableton_quit()` function (line 181) has its own timeout for waiting, but the `taskkill` command itself could hang.
+**Location**: `MCP_Server/ableton_process.py:158-163`, `ableton_process.py:172-179`
 
 ---
 

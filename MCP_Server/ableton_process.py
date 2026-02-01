@@ -91,20 +91,17 @@ def is_ableton_running(platform: Platform | None = None) -> bool:
 def _is_ableton_running_macos() -> bool:
     """Check if Ableton Live is running on macOS.
 
-    Uses AppleScript to query System Events for the "Live" process.
-    The process name is "Live" regardless of edition (Suite/Standard/Intro).
+    Uses pgrep to find processes matching "Ableton Live".
+    This works across all editions (Suite/Standard/Intro) and requires
+    no special permissions (unlike osascript System Events).
     """
     result = subprocess.run(
-        [
-            "osascript",
-            "-e",
-            'tell application "System Events" to (name of processes) contains "Live"',
-        ],
+        ["pgrep", "-f", "Ableton Live"],
         capture_output=True,
         text=True,
-        check=True,
     )
-    return result.stdout.strip().lower() == "true"
+    # pgrep returns 0 if any processes matched, 1 if none matched
+    return result.returncode == 0
 
 
 def _is_ableton_running_windows() -> bool:
@@ -162,6 +159,7 @@ def _quit_ableton_macos() -> None:
         ["osascript", "-e", 'tell application id "com.ableton.live" to quit'],
         capture_output=True,
         text=True,
+        timeout=10.0,  # Don't hang indefinitely if Ableton is unresponsive
         check=True,
     )
 
@@ -176,6 +174,7 @@ def _quit_ableton_windows() -> None:
         ["taskkill", "/IM", "Ableton Live*.exe"],
         capture_output=True,
         text=True,
+        timeout=10.0,  # Don't hang indefinitely if taskkill is unresponsive
         # Don't check=True here because taskkill returns non-zero if no
         # matching process is found, but that's not an error for our use case.
     )
@@ -313,12 +312,12 @@ def launch_ableton(platform: Platform | None = None) -> None:
 def _launch_ableton_macos() -> None:
     """Launch Ableton Live on macOS.
 
-    Uses AppleScript with the bundle ID "com.ableton.live" which works
-    across all editions (Suite/Standard/Intro). The "activate" command
-    launches the app if not running and brings it to the front.
+    Uses the open command with bundle ID "com.ableton.live" which works
+    across all editions (Suite/Standard/Intro) and requires no special
+    permissions (unlike osascript).
     """
     result = subprocess.run(
-        ["osascript", "-e", 'tell application id "com.ableton.live" to activate'],
+        ["open", "-b", "com.ableton.live"],
         capture_output=True,
         text=True,
     )

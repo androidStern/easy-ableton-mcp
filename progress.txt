@@ -177,6 +177,21 @@ TDD approach:
 
 ---
 
+## COMPLETED: CODE_REVIEW.md Issue #7 - Subprocess Timeout
+
+### Problem
+`subprocess.run()` calls for quitting Ableton had no timeout - could hang indefinitely.
+
+### Solution
+Added `timeout=10.0` to:
+- `_quit_ableton_windows()` (taskkill)
+- `_quit_ableton_macos()` (osascript)
+
+### Test Results
+- 67 tests passing
+
+---
+
 ## COMPLETED: CODE_REVIEW.md Issue #6 - Generic Exception Raised
 
 ### Problem
