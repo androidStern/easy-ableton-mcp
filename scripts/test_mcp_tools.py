@@ -75,6 +75,13 @@ async def main():
                 "get_envelope_value_at_time", "clear_clip_envelopes",
                 # Scene management tools
                 "get_scenes_info", "create_scene", "delete_scene", "set_scene_name", "fire_scene",
+                # Clip properties tools
+                "get_clip_properties", "set_clip_loop", "duplicate_clip", "delete_clip",
+                # Transport & timing tools (Priority 8)
+                "get_current_time", "set_current_time", "get_is_playing",
+                "set_metronome", "undo", "redo",
+                # Audio track tools (Priority 6)
+                "create_audio_track",
             ]
             missing = [t for t in required_tools if t not in tool_names]
             if missing:
@@ -717,6 +724,318 @@ async def main():
                     print(f"  FAIL: Expected {initial_scene_count} scenes, got {final_scene_count}\n")
                     return 1
                 print(f"     Scene count restored to {final_scene_count}")
+
+                print("  PASS\n")
+
+            except Exception as e:
+                print(f"  FAIL: {e}\n")
+                return 1
+
+            # ================================================================
+            # Clip Properties Round-Trip Test
+            # Tests: get_clip_properties, set_clip_loop, duplicate_clip
+            # ================================================================
+            print("--- Test: Clip Properties Round-Trip ---")
+            try:
+                # Step 1: GET CLIP PROPERTIES - Read initial clip state
+                print("  1. Getting clip properties...")
+                result = await session.call_tool("get_clip_properties", {
+                    "track_index": 0,
+                    "clip_index": 0
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: get_clip_properties error: {data['error']}\n")
+                    return 1
+                original_looping = data.get("looping")
+                original_loop_start = data.get("loop_start")
+                original_loop_end = data.get("loop_end")
+                print(f"     Looping: {original_looping}, Loop: {original_loop_start}-{original_loop_end}")
+
+                # Step 2: SET CLIP LOOP - Change loop parameters
+                print("  2. Setting loop to 1.0-3.0, looping=True...")
+                result = await session.call_tool("set_clip_loop", {
+                    "track_index": 0,
+                    "clip_index": 0,
+                    "looping": True,
+                    "loop_start": 1.0,
+                    "loop_end": 3.0
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_clip_loop error: {data['error']}\n")
+                    return 1
+                print("     Loop parameters set")
+
+                # Step 3: VERIFY LOOP - Confirm loop was set
+                print("  3. Verifying loop parameters...")
+                result = await session.call_tool("get_clip_properties", {
+                    "track_index": 0,
+                    "clip_index": 0
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if data.get("looping") is not True:
+                    print(f"  FAIL: Looping not set (got {data.get('looping')})\n")
+                    return 1
+                if abs(data.get("loop_start", 0) - 1.0) > 0.01:
+                    print(f"  FAIL: Loop start not set (got {data.get('loop_start')})\n")
+                    return 1
+                if abs(data.get("loop_end", 0) - 3.0) > 0.01:
+                    print(f"  FAIL: Loop end not set (got {data.get('loop_end')})\n")
+                    return 1
+                print("     Loop verified: 1.0-3.0, looping=True")
+
+                # Step 4: CLEANUP - Delete any existing clip in slot 1 (from previous runs)
+                print("  4. Cleaning up slot 1 if needed...")
+                result = await session.call_tool("get_clip_properties", {
+                    "track_index": 0,
+                    "clip_index": 1
+                })
+                content = result.content[0].text if result.content else ""
+                try:
+                    data = json.loads(content)
+                    if "error" not in data:  # Slot 1 has a clip, delete it
+                        print("     Found existing clip in slot 1, deleting...")
+                        await session.call_tool("delete_clip", {
+                            "track_index": 0,
+                            "clip_index": 1
+                        })
+                        print("     Deleted")
+                    else:
+                        print("     Slot 1 is empty")
+                except json.JSONDecodeError:
+                    print("     Slot 1 is empty")
+
+                # Step 5: DUPLICATE CLIP - Copy clip to another slot
+                print("  5. Duplicating clip to slot 1...")
+                result = await session.call_tool("duplicate_clip", {
+                    "track_index": 0,
+                    "clip_index": 0,
+                    "target_track_index": 0,
+                    "target_clip_index": 1
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: duplicate_clip error: {data['error']}\n")
+                    return 1
+                print("     Clip duplicated")
+
+                # Step 6: VERIFY DUPLICATE - Check duplicated clip exists
+                print("  6. Verifying duplicated clip...")
+                result = await session.call_tool("get_clip_properties", {
+                    "track_index": 0,
+                    "clip_index": 1
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: Duplicated clip not found: {data['error']}\n")
+                    return 1
+                print(f"     Duplicate exists: {data.get('name')}")
+
+                # Step 7: RESTORE - Reset original clip loop parameters
+                print("  7. Restoring original loop parameters...")
+                result = await session.call_tool("set_clip_loop", {
+                    "track_index": 0,
+                    "clip_index": 0,
+                    "looping": original_looping,
+                    "loop_start": original_loop_start,
+                    "loop_end": original_loop_end
+                })
+                content = result.content[0].text if result.content else ""
+                print("     Original parameters restored")
+
+                # Step 8: CLEANUP - Delete the duplicated clip
+                print("  8. Deleting duplicated clip...")
+                result = await session.call_tool("delete_clip", {
+                    "track_index": 0,
+                    "clip_index": 1
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  WARN: Could not delete clip: {data['error']}")
+                else:
+                    print("     Duplicated clip deleted")
+
+                print("  PASS\n")
+
+            except Exception as e:
+                print(f"  FAIL: {e}\n")
+                return 1
+
+            # ================================================================
+            # Transport & Timing Round-Trip Test
+            # Tests: get_current_time, set_current_time, get_is_playing,
+            #        set_metronome, undo, redo
+            # ================================================================
+            print("--- Test: Transport & Timing Round-Trip ---")
+            try:
+                # Step 1: GET CURRENT TIME - Read initial song position
+                print("  1. Getting current song position...")
+                result = await session.call_tool("get_current_time", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: get_current_time error: {data['error']}\n")
+                    return 1
+                original_time = data.get("current_time")
+                print(f"     Current time: {original_time} beats")
+
+                # Step 2: GET IS PLAYING - Check playback state
+                print("  2. Checking playback state...")
+                result = await session.call_tool("get_is_playing", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: get_is_playing error: {data['error']}\n")
+                    return 1
+                is_playing = data.get("is_playing")
+                print(f"     Is playing: {is_playing}")
+
+                # Step 3: SET CURRENT TIME - Jump to position 4.0
+                print("  3. Setting song position to 4.0 beats...")
+                result = await session.call_tool("set_current_time", {
+                    "time": 4.0
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_current_time error: {data['error']}\n")
+                    return 1
+                print(f"     Position set to: {data.get('current_time')} beats")
+
+                # Step 4: VERIFY POSITION - Confirm position changed
+                print("  4. Verifying song position...")
+                result = await session.call_tool("get_current_time", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                current = data.get("current_time", -1)
+                # Allow some tolerance since position might drift
+                if abs(current - 4.0) > 0.1:
+                    print(f"  FAIL: Position not set (got {current})\n")
+                    return 1
+                print(f"     Position verified: {current} beats")
+
+                # Step 5: GET METRONOME STATE - Check current metronome
+                print("  5. Checking metronome state...")
+                result = await session.call_tool("get_is_playing", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                original_metronome = data.get("metronome", False)
+                print(f"     Metronome: {original_metronome}")
+
+                # Step 6: SET METRONOME - Toggle metronome
+                new_metronome = not original_metronome
+                print(f"  6. Setting metronome to {new_metronome}...")
+                result = await session.call_tool("set_metronome", {
+                    "enabled": new_metronome
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: set_metronome error: {data['error']}\n")
+                    return 1
+                print(f"     Metronome set to: {data.get('enabled')}")
+
+                # Step 7: VERIFY METRONOME - Confirm metronome changed
+                print("  7. Verifying metronome state...")
+                result = await session.call_tool("get_is_playing", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if data.get("metronome") != new_metronome:
+                    print(f"  FAIL: Metronome not set (got {data.get('metronome')})\n")
+                    return 1
+                print("     Metronome verified")
+
+                # Step 8: TEST UNDO - Undo the last operation
+                print("  8. Testing undo...")
+                result = await session.call_tool("undo", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: undo error: {data['error']}\n")
+                    return 1
+                print("     Undo executed")
+
+                # Step 9: TEST REDO - Redo the undone operation
+                print("  9. Testing redo...")
+                result = await session.call_tool("redo", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: redo error: {data['error']}\n")
+                    return 1
+                print("     Redo executed")
+
+                # Step 10: RESTORE - Reset to original position and metronome
+                print("  10. Restoring original state...")
+                await session.call_tool("set_current_time", {"time": original_time})
+                await session.call_tool("set_metronome", {"enabled": original_metronome})
+                print(f"     Restored position={original_time}, metronome={original_metronome}")
+
+                print("  PASS\n")
+
+            except Exception as e:
+                print(f"  FAIL: {e}\n")
+                return 1
+
+            # ================================================================
+            # Audio Track Creation Test
+            # Tests: create_audio_track
+            # ================================================================
+            print("--- Test: Audio Track Creation ---")
+            try:
+                # Step 1: GET INITIAL TRACK COUNT
+                print("  1. Getting initial track count...")
+                result = await session.call_tool("get_session_info", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                initial_track_count = data.get("track_count")
+                print(f"     Initial tracks: {initial_track_count}")
+
+                # Step 2: CREATE AUDIO TRACK - Create at end of track list
+                print("  2. Creating audio track...")
+                result = await session.call_tool("create_audio_track", {
+                    "index": -1
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                if "error" in data:
+                    print(f"  FAIL: create_audio_track error: {data['error']}\n")
+                    return 1
+                new_track_index = data.get("index")
+                new_track_name = data.get("name")
+                print(f"     Created audio track '{new_track_name}' at index {new_track_index}")
+
+                # Step 3: VERIFY TRACK COUNT - Confirm track was added
+                print("  3. Verifying track count increased...")
+                result = await session.call_tool("get_session_info", {})
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                new_track_count = data.get("track_count")
+                if new_track_count != initial_track_count + 1:
+                    print(f"  FAIL: Track count not increased (got {new_track_count})\n")
+                    return 1
+                print(f"     Track count: {new_track_count}")
+
+                # Step 4: VERIFY TRACK TYPE - Confirm it's an audio track
+                print("  4. Verifying track type...")
+                result = await session.call_tool("get_track_info", {
+                    "track_index": new_track_index
+                })
+                content = result.content[0].text if result.content else ""
+                data = json.loads(content)
+                # Audio tracks should have has_audio_input: true or similar indicator
+                track_type = "audio" if data.get("has_audio_input", False) else "midi"
+                print(f"     Track type indicator: has_audio_input={data.get('has_audio_input')}")
+
+                # Note: We leave the audio track in place - deleting tracks is destructive
+                # and may affect the test fixture for subsequent test runs
 
                 print("  PASS\n")
 

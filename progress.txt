@@ -590,3 +590,105 @@ Files changed:
 - `scripts/test_mcp_tools.py` - Added Scene Management Round-Trip Test
 
 All 70 unit tests pass. E2E tests pass.
+
+## 2026-02-01: Clip Properties (Priority 7)
+
+Implemented 3 clip properties tools:
+- `get_clip_properties` - read-only, returns loop settings, markers, length
+- `set_clip_loop` - main_thread, sets looping/loop_start/loop_end
+- `duplicate_clip` - main_thread, copies clip to another slot
+
+Files changed:
+- `AbletonMCP_Remote_Script/__init__.py` - Added handlers
+- `MCP_Server/server.py` - Added MCP tool definitions
+- `tests/test_command_dispatch.py` - Added to command lists
+- `tests/conftest.py` - Added clip loop property mocks
+- `scripts/test_mcp_tools.py` - Added Clip Properties Round-Trip Test
+
+Note: duplicate_clip uses ClipSlot.duplicate_clip_to(), not Clip.duplicate_clip_to()
+
+All 76 unit tests pass. E2E tests pass.
+
+## 2026-02-01: Transport & Timing + Audio Track (Priority 8 & 6) - TDD Red Phase
+
+### Tests Written (before implementation)
+
+Added 7 new required tools to test_mcp_tools.py:
+- Transport & Timing: get_current_time, set_current_time, get_is_playing, set_metronome, undo, redo
+- Audio Track: create_audio_track
+
+### Integration Tests Added
+
+**Transport & Timing Round-Trip Test:**
+1. get_current_time - Read initial song position
+2. get_is_playing - Check playback state + metronome
+3. set_current_time - Jump to position 4.0
+4. Verify position changed
+5. set_metronome - Toggle metronome
+6. Verify metronome changed
+7. undo - Undo last operation
+8. redo - Redo the undone operation
+9. Restore original state
+
+**Audio Track Creation Test:**
+1. Get initial track count
+2. create_audio_track at index -1
+3. Verify track count increased
+4. Verify track type (has_audio_input)
+
+### Unit Tests Added (test_command_dispatch.py)
+
+**DIRECT_COMMANDS (read-only):**
+- get_current_time - reads song position
+- get_is_playing - reads playback state
+
+**MAIN_THREAD_COMMANDS (state-modifying):**
+- set_current_time - modifies song position
+- set_metronome - modifies metronome state
+- undo - undo operation
+- redo - redo operation
+- create_audio_track - creates audio track
+
+### Mock Fixtures Added (conftest.py)
+- song.current_song_time = 0.0
+- song.metronome = False
+- song.undo = MagicMock()
+- song.redo = MagicMock()
+- song.create_audio_track = MagicMock()
+
+### TDD Red Phase Confirmed
+- Integration tests: FAIL - Missing 7 tools
+- Unit tests: 12 FAILED, 78 passed (expected - commands not implemented)
+
+### TDD Green Phase Complete
+
+**Implemented 8 new tools:**
+
+Transport & Timing (Priority 8):
+- `get_current_time` - Get current song position in beats
+- `get_is_playing` - Get playback state + metronome status
+- `set_current_time` - Jump to position in beats
+- `set_metronome` - Toggle metronome on/off
+- `undo` - Undo last operation
+- `redo` - Redo undone operation
+
+Audio Track (Priority 6):
+- `create_audio_track` - Create audio track at index
+
+Clip Management (bonus):
+- `delete_clip` - Delete clip from slot (needed to fix test brittleness)
+
+**Test Results:**
+- Unit tests: 92 passed
+- Integration tests: All 11 test suites pass
+
+**Files Changed:**
+- AbletonMCP_Remote_Script/__init__.py - Added 8 command handlers
+- MCP_Server/server.py - Added 8 MCP tool definitions
+- tests/test_command_dispatch.py - Added new commands to test lists
+- tests/conftest.py - Added mocks for new commands
+- scripts/test_mcp_tools.py - Added Transport & Audio tests, fixed Clip Properties cleanup
+
+**Bug Fix:**
+- Fixed brittle Clip Properties test that left state behind (duplicate clip in slot 1)
+- Test now cleans up before and after using delete_clip

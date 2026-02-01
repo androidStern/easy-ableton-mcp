@@ -16,11 +16,12 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 
 ## Current easy-ableton-mcp Capabilities
 
-### What We Have (39 tools)
+### What We Have (50 tools)
 - `get_session_info` - tempo, signature, track count
 - `get_session_tree` - full recursive tree with devices/chains/pads
 - `get_track_info` - track details with clips and devices
 - `create_midi_track` - create track at index
+- `create_audio_track` - create audio track at index ✅ NEW
 - `set_track_name` - rename track
 - `set_track_volume` / `set_track_pan` - mixer controls
 - `set_track_mute` / `set_track_solo` - mixer states
@@ -32,8 +33,14 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 - `transpose_notes_in_clip` - shift by semitones
 - `quantize_notes_in_clip` - snap to grid
 - `set_clip_name` - rename clip
+- `delete_clip` - delete clip from slot ✅ NEW
 - `fire_clip` / `stop_clip` - clip playback control
 - `start_playback` / `stop_playback` - transport control
+- `get_current_time` - get current song position in beats ✅ NEW
+- `set_current_time` - jump to position in beats ✅ NEW
+- `get_is_playing` - get playback state + metronome ✅ NEW
+- `set_metronome` - toggle metronome on/off ✅ NEW
+- `undo` / `redo` - undo/redo operations ✅ NEW
 - `set_tempo` - tempo control
 - `load_instrument_or_effect` - load by URI
 - `load_drum_kit` - load drum rack + kit
@@ -46,15 +53,18 @@ Comprehensive inventory of features in other Ableton MCP/control projects that e
 - `insert_envelope_point` - add automation point
 - `get_envelope_value_at_time` - read automation value
 - `clear_clip_envelopes` - clear all automation from clip
-- `get_scenes_info` - get all scene metadata ✅ NEW
-- `create_scene` - create scene at index ✅ NEW
-- `delete_scene` - delete scene ✅ NEW
-- `set_scene_name` - rename scene ✅ NEW
-- `fire_scene` - launch entire scene ✅ NEW
+- `get_scenes_info` - get all scene metadata
+- `create_scene` - create scene at index
+- `delete_scene` - delete scene
+- `set_scene_name` - rename scene
+- `fire_scene` - launch entire scene
+- `get_clip_properties` - get loop settings, markers, length
+- `set_clip_loop` - set looping, loop_start, loop_end
+- `duplicate_clip` - copy clip to another slot
 
 ### What We're Missing
 
-Priorities 6+ below.
+Priorities 8+ below.
 
 ---
 
@@ -262,21 +272,26 @@ track.send_a = 0.5         # Send level to return A
 
 ---
 
-## Priority 6: Audio Track Features
+## Priority 6: Audio Track Features (Partial)
 
-**Impact: MEDIUM** - Audio workflow support.
+**Status: PARTIALLY IMPLEMENTED** - create_audio_track done
 
-### Features Needed
+### Features Implemented
+
+| Feature | Description |
+|---------|-------------|
+| `create_audio_track` | Create audio track at index |
+
+### Not Implemented
 
 | Feature | Who Has It | Description |
 |---------|------------|-------------|
-| `create_audio_track` | itsuzef, ableton-js | Create audio track |
 | `import_audio_file` | itsuzef | Load audio from browser |
 | `create_audio_clip` | ableton-copilot | Create clip from file |
 | Audio clip properties | ableton-js | Warp mode, gain, pitch |
 | Recording control | ableton-copilot | Start/stop recording |
 
-### Audio Clip Properties
+### Audio Clip Properties (Future)
 ```python
 clip.warping = True
 clip.warp_mode = WarpMode.Beats  # Beats, Tones, Texture, Repitch, Complex
@@ -287,60 +302,52 @@ clip.pitch_fine = 0              # Cents
 
 ---
 
-## Priority 7: Clip Properties & Loop Control
+## Priority 7: Clip Properties & Loop Control ✅ DONE
 
-**Impact: MEDIUM** - Clip behavior customization.
+**Status: IMPLEMENTED** - get_clip_properties, set_clip_loop, duplicate_clip
 
-### Features Needed
+### Features Implemented
+
+| Feature | Description |
+|---------|-------------|
+| `get_clip_properties` | Get loop settings, markers, length, play state |
+| `set_clip_loop` | Set looping, loop_start, loop_end |
+| `duplicate_clip` | Copy clip to another slot |
+
+### Not Implemented
 
 | Feature | Who Has It | Description |
 |---------|------------|-------------|
-| `set_clip_loop_parameters` | itsuzef | Loop start/end/enabled |
 | `set_clip_follow_action` | itsuzef | Follow action settings |
 | `crop_clip` | ableton-copilot, ableton-js | Trim to loop/markers |
-| `duplicate_clip_loop` | ableton-copilot, ableton-js | Double loop with content |
 | Launch mode/quantization | ableton-js | Trigger/Gate/Toggle/Repeat |
-
-### Clip Loop Properties
-```python
-clip.loop_start = 0.0      # In beats
-clip.loop_end = 4.0        # In beats
-clip.looping = True        # Enable loop
-clip.start_marker = 0.0    # Warp start
-clip.end_marker = 8.0      # Warp end
-```
-
-### Follow Actions
-```python
-# Set what happens after clip plays
-set_clip_follow_action(
-    track, clip,
-    action="next",      # stop, again, previous, next, first, last, any, other
-    chance=1.0,         # 0-1 probability
-    time=4.0            # In beats
-)
-```
 
 ---
 
-## Priority 8: Transport & Timing
+## Priority 8: Transport & Timing ✅ DONE
 
-**Impact: MEDIUM** - Playback control.
+**Status: IMPLEMENTED** - get_current_time, set_current_time, get_is_playing, set_metronome, undo, redo
 
-### Features Needed
+### Features Implemented
+
+| Feature | Description |
+|---------|-------------|
+| `get_current_time` | Get current song position in beats |
+| `set_current_time` | Jump to position in beats |
+| `get_is_playing` | Check playback state + metronome status |
+| `set_metronome` | Toggle metronome on/off |
+| `undo` | Undo last operation |
+| `redo` | Redo undone operation |
+
+### Not Implemented
 
 | Feature | Who Has It | Description |
 |---------|------------|-------------|
-| `get_current_time` | ableton-js, pylive | Current song position |
-| `set_current_time` | ableton-js | Jump to position |
-| `get_is_playing` | pylive | Check playback state |
-| Metronome control | pylive | On/off |
 | Quantization setting | pylive | Global launch quantize |
-| Undo/Redo | ableton-js | `undo()`, `redo()` |
 | Beat callbacks | pylive | Fire on each beat |
 | Cue points | ableton-js | Navigate markers |
 
-### Beat Synchronization (pylive)
+### Beat Synchronization (Future - requires event listeners)
 ```python
 def on_beat(beat_number):
     # Do something every beat
@@ -469,11 +476,11 @@ unsubscribe()
 ### Phase 2: Creative Features
 4. ~~**Automation**~~ ✅ DONE - create, insert, read, clear (cannot modify existing points)
 5. ~~**Scene Management**~~ ✅ DONE - get info, create, delete, rename, fire
-6. **Clip Properties** - loop, follow actions
+6. ~~**Clip Properties**~~ ✅ DONE - get properties, set loop, duplicate clip
 
 ### Phase 3: Audio & Polish
-7. **Audio Tracks** - create, import files
-8. **Transport** - current time, undo/redo
+7. ~~**Audio Tracks**~~ ✅ PARTIAL - create_audio_track done, import files TODO
+8. ~~**Transport**~~ ✅ DONE - current time, metronome, undo/redo
 9. **Return Tracks** - full support
 
 ### Phase 4: Advanced
@@ -490,7 +497,7 @@ unsubscribe()
 | Get session info | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Get session tree | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Create MIDI track | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Create audio track | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Create audio track | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Set track volume/pan | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Set track mute/solo | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ |
 | Create clip | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -506,12 +513,12 @@ unsubscribe()
 | Clear automation | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
 | Scene management | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Fire scene | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ |
-| Clip loop control | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Clip loop control | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Follow actions | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Load device by URI | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Browser preview | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | Transport control | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Undo/Redo | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Undo/Redo | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | Cue points | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Beat callbacks | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Event listeners | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |

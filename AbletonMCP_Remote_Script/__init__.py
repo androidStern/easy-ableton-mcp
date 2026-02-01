@@ -1032,6 +1032,158 @@ class AbletonMCP(ControlSurface):
             self.log_message(traceback.format_exc())
             raise
 
+    # Clip Properties Commands
+
+    @commands.register("get_clip_properties")
+    def _get_clip_properties(self, track_index=None, clip_index=None):
+        """Get properties of a clip including loop settings.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip slot index
+
+        Returns:
+            Dictionary with clip properties
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            clip = clip_slot.clip
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "name": clip.name,
+                "length": clip.length,
+                "looping": clip.looping,
+                "loop_start": clip.loop_start,
+                "loop_end": clip.loop_end,
+                "start_marker": clip.start_marker,
+                "end_marker": clip.end_marker,
+                "is_playing": clip.is_playing,
+                "is_recording": clip.is_recording
+            }
+        except Exception as e:
+            self.log_message("Error getting clip properties: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("set_clip_loop", main_thread=True)
+    def _set_clip_loop(self, track_index=None, clip_index=None, looping=None, loop_start=None, loop_end=None):
+        """Set loop parameters for a clip.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip slot index
+            looping: Enable/disable looping (optional)
+            loop_start: Loop start in beats (optional)
+            loop_end: Loop end in beats (optional)
+
+        Returns:
+            Dictionary with updated loop properties
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            clip_slot = self._get_clip_slot(track_index, clip_index)
+
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+
+            clip = clip_slot.clip
+
+            if looping is not None:
+                clip.looping = bool(looping)
+            if loop_start is not None:
+                clip.loop_start = float(loop_start)
+            if loop_end is not None:
+                clip.loop_end = float(loop_end)
+
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "looping": clip.looping,
+                "loop_start": clip.loop_start,
+                "loop_end": clip.loop_end
+            }
+        except Exception as e:
+            self.log_message("Error setting clip loop: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("duplicate_clip", main_thread=True)
+    def _duplicate_clip(self, track_index=None, clip_index=None, target_track_index=None, target_clip_index=None):
+        """Duplicate a clip to another slot.
+
+        Args:
+            track_index: Source track index
+            clip_index: Source clip slot index
+            target_track_index: Target track index
+            target_clip_index: Target clip slot index
+
+        Returns:
+            Dictionary confirming the duplication
+        """
+        try:
+            track_index = self._require_param("track_index", track_index)
+            clip_index = self._require_param("clip_index", clip_index)
+            target_track_index = self._require_param("target_track_index", target_track_index)
+            target_clip_index = self._require_param("target_clip_index", target_clip_index)
+
+            source_slot = self._get_clip_slot(track_index, clip_index)
+            if not source_slot.has_clip:
+                raise Exception("No clip in source slot")
+
+            target_slot = self._get_clip_slot(target_track_index, target_clip_index)
+            if target_slot.has_clip:
+                raise Exception("Target slot already has a clip")
+
+            # Use duplicate_clip_to on the slot, not the clip
+            source_slot.duplicate_clip_to(target_slot)
+
+            return {
+                "source_track_index": track_index,
+                "source_clip_index": clip_index,
+                "target_track_index": target_track_index,
+                "target_clip_index": target_clip_index,
+                "duplicated": True
+            }
+        except Exception as e:
+            self.log_message("Error duplicating clip: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    @commands.register("delete_clip", main_thread=True)
+    def _delete_clip(self, track_index=None, clip_index=None):
+        """Delete a clip from a slot.
+
+        Args:
+            track_index: Track index
+            clip_index: Clip slot index
+
+        Returns:
+            Dictionary confirming the deletion
+        """
+        track_index = self._require_param("track_index", track_index)
+        clip_index = self._require_param("clip_index", clip_index)
+
+        slot = self._get_clip_slot(track_index, clip_index)
+        if not slot.has_clip:
+            raise Exception("No clip in slot")
+
+        slot.delete_clip()
+
+        return {
+            "track_index": track_index,
+            "clip_index": clip_index,
+            "deleted": True
+        }
+
     @commands.register("set_clip_name", main_thread=True)
     def _set_clip_name(self, track_index=None, clip_index=None, name=""):
         """Set the name of a clip"""
@@ -1127,7 +1279,7 @@ class AbletonMCP(ControlSurface):
         """Stop playing the session"""
         try:
             self._song.stop_playing()
-            
+
             result = {
                 "playing": self._song.is_playing
             }
@@ -1135,7 +1287,80 @@ class AbletonMCP(ControlSurface):
         except Exception as e:
             self.log_message("Error stopping playback: " + str(e))
             raise
-    
+
+    # =========================================================================
+    # Transport & Timing Commands
+    # =========================================================================
+
+    @commands.register("get_current_time")
+    def _get_current_time(self):
+        """Get the current song position in beats."""
+        return {
+            "current_time": self._song.current_song_time
+        }
+
+    @commands.register("get_is_playing")
+    def _get_is_playing(self):
+        """Get the current playback state and metronome status."""
+        return {
+            "is_playing": self._song.is_playing,
+            "metronome": self._song.metronome
+        }
+
+    @commands.register("set_current_time", main_thread=True)
+    def _set_current_time(self, time=None):
+        """Set the current song position in beats."""
+        self._require_param("time", time)
+        self._song.current_song_time = float(time)
+        return {
+            "current_time": self._song.current_song_time
+        }
+
+    @commands.register("set_metronome", main_thread=True)
+    def _set_metronome(self, enabled=None):
+        """Set the metronome on/off."""
+        self._require_param("enabled", enabled)
+        self._song.metronome = bool(enabled)
+        return {
+            "enabled": self._song.metronome
+        }
+
+    @commands.register("undo", main_thread=True)
+    def _undo(self):
+        """Undo the last operation."""
+        self._song.undo()
+        return {"undone": True}
+
+    @commands.register("redo", main_thread=True)
+    def _redo(self):
+        """Redo the last undone operation."""
+        self._song.redo()
+        return {"redone": True}
+
+    # =========================================================================
+    # Audio Track Commands
+    # =========================================================================
+
+    @commands.register("create_audio_track", main_thread=True)
+    def _create_audio_track(self, index=None):
+        """Create a new audio track at the specified index."""
+        if index is None:
+            index = -1
+
+        # -1 means append at end
+        if index == -1:
+            index = len(self._song.tracks)
+
+        self._song.create_audio_track(index)
+
+        # Get the newly created track
+        track = self._song.tracks[index]
+        return {
+            "index": index,
+            "name": track.name,
+            "has_audio_input": track.has_audio_input
+        }
+
     @commands.register("get_browser_item")
     def _get_browser_item(self, uri=None, path=None):
         """Get a browser item by URI or path"""

@@ -17,6 +17,10 @@ DIRECT_COMMANDS = [
     ("get_clip_envelope", {"track_index": 0, "clip_index": 0, "device_index": 0, "parameter_index": 0}),
     ("get_envelope_value_at_time", {"track_index": 0, "clip_index": 0, "device_index": 0, "parameter_index": 0, "time": 0.5}),
     ("get_scenes_info", {}),
+    ("get_clip_properties", {"track_index": 0, "clip_index": 0}),
+    # Transport & timing (read-only)
+    ("get_current_time", {}),
+    ("get_is_playing", {}),
 ]
 
 MAIN_THREAD_COMMANDS = [
@@ -45,6 +49,17 @@ MAIN_THREAD_COMMANDS = [
     ("delete_scene", {"scene_index": 0}),
     ("set_scene_name", {"scene_index": 0, "name": "Test Scene"}),
     ("fire_scene", {"scene_index": 0}),
+    # Clip properties commands
+    ("set_clip_loop", {"track_index": 0, "clip_index": 0, "looping": True, "loop_start": 0.0, "loop_end": 4.0}),
+    ("duplicate_clip", {"track_index": 0, "clip_index": 0, "target_track_index": 0, "target_clip_index": 1}),
+    ("delete_clip", {"track_index": 0, "clip_index": 0}),
+    # Transport & timing commands (state-modifying)
+    ("set_current_time", {"time": 4.0}),
+    ("set_metronome", {"enabled": True}),
+    ("undo", {}),
+    ("redo", {}),
+    # Audio track commands
+    ("create_audio_track", {"index": -1}),
 ]
 
 

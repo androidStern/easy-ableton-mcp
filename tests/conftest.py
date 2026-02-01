@@ -64,6 +64,13 @@ def mcp():
     song.master_track.mixer_device.volume.value = 0.85
     song.master_track.mixer_device.panning.value = 0.0
 
+    # Transport & timing properties
+    song.current_song_time = 0.0
+    song.metronome = False
+    song.undo = MagicMock()
+    song.redo = MagicMock()
+    song.create_audio_track = MagicMock()
+
     # One track with one clip slot and one device
     track = MagicMock()
     track.name = "Track 1"
@@ -83,6 +90,13 @@ def mcp():
     slot0.clip.is_playing = False
     slot0.clip.is_recording = False
 
+    # Loop properties for clip properties tests
+    slot0.clip.looping = True
+    slot0.clip.loop_start = 0.0
+    slot0.clip.loop_end = 4.0
+    slot0.clip.start_marker = 0.0
+    slot0.clip.end_marker = 4.0
+
     # Envelope mock for automation tests
     envelope = MagicMock()
     envelope.insert_step = MagicMock()
@@ -91,9 +105,14 @@ def mcp():
     slot0.clip.create_automation_envelope = MagicMock(return_value=envelope)
     slot0.clip.clear_all_envelopes = MagicMock()
 
-    # Slot 1: empty (for create_clip)
+    # Slot 1: empty (for create_clip, duplicate_clip target)
     slot1 = MagicMock()
     slot1.has_clip = False
+
+    # Mock duplicate_clip_to on the slot for duplicate_clip tests
+    slot0.duplicate_clip_to = MagicMock()
+    # Mock delete_clip on the slot for delete_clip tests
+    slot0.delete_clip = MagicMock()
 
     track.clip_slots = [slot0, slot1]
 
@@ -112,6 +131,16 @@ def mcp():
 
     song.tracks = [track]
     song.return_tracks = []
+
+    # Mock create_audio_track to actually insert a track into the list
+    def mock_create_audio_track(index):
+        new_track = MagicMock()
+        new_track.name = "Audio"
+        new_track.has_audio_input = True
+        new_track.has_midi_input = False
+        song.tracks.insert(index, new_track)
+
+    song.create_audio_track = MagicMock(side_effect=mock_create_audio_track)
 
     # Mock scenes for scene management tests
     scene0 = MagicMock()

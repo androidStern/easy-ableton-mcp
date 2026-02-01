@@ -591,6 +591,93 @@ def stop_playback(ctx: Context) -> str:
     """Stop playing the Ableton session."""
     return None
 
+
+# Transport & Timing Tools
+
+@mcp.tool()
+@ableton_command("get_current_time")
+def get_current_time(ctx: Context) -> str:
+    """
+    Get the current song position in beats.
+
+    Returns JSON with current_time (float, in beats).
+    """
+    return None
+
+
+@mcp.tool()
+@ableton_command("get_is_playing")
+def get_is_playing(ctx: Context) -> str:
+    """
+    Get the current playback state and metronome status.
+
+    Returns JSON with is_playing (bool) and metronome (bool).
+    """
+    return None
+
+
+@mcp.tool()
+@ableton_command("set_current_time")
+def set_current_time(ctx: Context, time: float) -> str:
+    """
+    Set the current song position in beats.
+
+    Parameters:
+    - time: The position to jump to in beats
+    """
+    return {"time": time}
+
+
+@mcp.tool()
+@ableton_command("set_metronome")
+def set_metronome(ctx: Context, enabled: bool) -> str:
+    """
+    Set the metronome on or off.
+
+    Parameters:
+    - enabled: True to enable metronome, False to disable
+    """
+    return {"enabled": enabled}
+
+
+@mcp.tool()
+@ableton_command("undo")
+def undo(ctx: Context) -> str:
+    """
+    Undo the last operation in Ableton.
+
+    Returns JSON with undone: true on success.
+    """
+    return None
+
+
+@mcp.tool()
+@ableton_command("redo")
+def redo(ctx: Context) -> str:
+    """
+    Redo the last undone operation in Ableton.
+
+    Returns JSON with redone: true on success.
+    """
+    return None
+
+
+# Audio Track Tools
+
+@mcp.tool()
+@ableton_command("create_audio_track")
+def create_audio_track(ctx: Context, index: int = -1) -> str:
+    """
+    Create a new audio track in the Ableton session.
+
+    Parameters:
+    - index: The index to insert the track at (-1 = end of list)
+
+    Returns JSON with index, name, and has_audio_input.
+    """
+    return {"index": index}
+
+
 @mcp.tool()
 def get_browser_tree(ctx: Context, category_type: str = "all", max_depth: int = 2, folders_only: bool = True) -> str:
     """
@@ -1004,6 +1091,98 @@ def fire_scene(ctx: Context, scene_index: int) -> str:
     Returns JSON confirming fired status with index and name.
     """
     return {"scene_index": scene_index}
+
+
+# Clip Properties Tools
+
+@mcp.tool()
+@ableton_command("get_clip_properties")
+def get_clip_properties(ctx: Context, track_index: int, clip_index: int) -> str:
+    """
+    Get properties of a clip including loop settings.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot
+
+    Returns JSON with name, length, looping, loop_start, loop_end,
+    start_marker, end_marker, is_playing, is_recording.
+    """
+    return {"track_index": track_index, "clip_index": clip_index}
+
+
+@mcp.tool()
+@ableton_command("set_clip_loop")
+def set_clip_loop(
+    ctx: Context,
+    track_index: int,
+    clip_index: int,
+    looping: bool = None,
+    loop_start: float = None,
+    loop_end: float = None
+) -> str:
+    """
+    Set loop parameters for a clip.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot
+    - looping: Enable/disable looping (optional)
+    - loop_start: Loop start position in beats (optional)
+    - loop_end: Loop end position in beats (optional)
+
+    Returns JSON with updated looping, loop_start, loop_end.
+    """
+    return {
+        "track_index": track_index,
+        "clip_index": clip_index,
+        "looping": looping,
+        "loop_start": loop_start,
+        "loop_end": loop_end
+    }
+
+
+@mcp.tool()
+@ableton_command("duplicate_clip")
+def duplicate_clip(
+    ctx: Context,
+    track_index: int,
+    clip_index: int,
+    target_track_index: int,
+    target_clip_index: int
+) -> str:
+    """
+    Duplicate a clip to another slot.
+
+    Parameters:
+    - track_index: Source track index
+    - clip_index: Source clip slot index
+    - target_track_index: Target track index
+    - target_clip_index: Target clip slot index (must be empty)
+
+    Returns JSON confirming duplication with source and target indices.
+    """
+    return {
+        "track_index": track_index,
+        "clip_index": clip_index,
+        "target_track_index": target_track_index,
+        "target_clip_index": target_clip_index
+    }
+
+
+@mcp.tool()
+@ableton_command("delete_clip")
+def delete_clip(ctx: Context, track_index: int, clip_index: int) -> str:
+    """
+    Delete a clip from a slot.
+
+    Parameters:
+    - track_index: The index of the track containing the clip
+    - clip_index: The index of the clip slot
+
+    Returns JSON confirming deletion with track_index, clip_index, deleted.
+    """
+    return {"track_index": track_index, "clip_index": clip_index}
 
 
 # Main execution
