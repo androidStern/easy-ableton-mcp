@@ -1,0 +1,110 @@
+"""Command dispatch tests for AbletonMCP.
+
+Tests _process_command() with real handlers, mocking only the Ableton API.
+"""
+
+import pytest
+from unittest.mock import MagicMock
+
+# Command inventories from _process_command()
+DIRECT_COMMANDS = [
+    ("get_session_info", {}),
+    ("get_track_info", {"track_index": 0}),
+    ("get_browser_tree", {"category_type": "all"}),
+    ("get_browser_items_at_path", {"path": ""}),
+    ("get_session_tree", {}),
+    ("get_device_parameters", {"track_index": 0, "device_index": 0}),
+]
+
+MAIN_THREAD_COMMANDS = [
+    ("create_midi_track", {"index": 0}),
+    ("set_track_name", {"track_index": 0, "name": "X"}),
+    ("create_clip", {"track_index": 0, "clip_index": 1, "length": 4.0}),  # slot 1 is empty
+    ("add_notes_to_clip", {"track_index": 0, "clip_index": 0, "notes": []}),  # slot 0 has clip
+    ("set_clip_name", {"track_index": 0, "clip_index": 0, "name": "Y"}),  # slot 0 has clip
+    ("set_tempo", {"tempo": 140.0}),
+    ("fire_clip", {"track_index": 0, "clip_index": 0}),  # slot 0 has clip
+    ("stop_clip", {"track_index": 0, "clip_index": 0}),  # slot 0 has clip
+    ("start_playback", {}),
+    ("stop_playback", {}),
+    ("load_browser_item", {"track_index": 0, "item_uri": "x"}),
+    ("set_device_parameter", {"track_index": 0, "device_index": 0, "parameter_index": 0, "value": 0.5}),
+    ("batch_set_device_parameters", {"track_index": 0, "device_index": 0, "parameters": []}),
+]
+
+
+class TestDirectCommands:
+    """Read-only commands execute synchronously, no schedule_message."""
+
+    @pytest.mark.parametrize("cmd,params", DIRECT_COMMANDS)
+    def test_returns_success(self, mcp, cmd, params):
+        response = mcp._process_command({"type": cmd, "params": params})
+        assert response["status"] == "success"
+
+    @pytest.mark.parametrize("cmd,params", DIRECT_COMMANDS)
+    def test_skips_schedule_message(self, mcp, cmd, params):
+        calls = []
+        mcp.schedule_message = lambda d, cb: calls.append(1)
+        mcp._process_command({"type": cmd, "params": params})
+        assert calls == []
+
+
+class TestMainThreadCommands:
+    """State-modifying commands use schedule_message + queue."""
+
+    @pytest.mark.parametrize("cmd,params", MAIN_THREAD_COMMANDS)
+    def test_returns_success(self, mcp, cmd, params):
+        response = mcp._process_command({"type": cmd, "params": params})
+        assert response["status"] == "success"
+
+    @pytest.mark.parametrize("cmd,params", MAIN_THREAD_COMMANDS)
+    def test_uses_schedule_message(self, mcp, cmd, params):
+        calls = []
+        original = mcp.schedule_message
+        mcp.schedule_message = lambda d, cb: (calls.append(1), original(d, cb))[-1]
+        mcp._process_command({"type": cmd, "params": params})
+        assert len(calls) == 1
+
+
+class TestQueueBehavior:
+    """The async queue pattern for main-thread commands."""
+
+    def test_timeout_when_callback_not_executed(self, mcp):
+        """Queue.get times out if schedule_message doesn't run callback."""
+        import queue as queue_module
+        original_get = queue_module.Queue.get
+
+        def fast_get(self, block=True, timeout=None):
+            return original_get(self, block=block, timeout=0.01)  # 10ms instead of 10s
+
+        mcp.schedule_message = lambda d, cb: None
+        queue_module.Queue.get = fast_get
+        try:
+            response = mcp._process_command({"type": "set_tempo", "params": {"tempo": 120}})
+        finally:
+            queue_module.Queue.get = original_get
+
+        assert response["status"] == "error"
+        assert "Timeout" in response["message"]
+
+    def test_error_propagates_through_queue(self, mcp):
+        """Exception in callback returns error response."""
+        mcp._song.tracks = []
+        response = mcp._process_command({
+            "type": "set_track_name",
+            "params": {"track_index": 99, "name": "X"}
+        })
+        assert response["status"] == "error"
+
+
+class TestErrorHandling:
+    """Error cases in command dispatch."""
+
+    def test_unknown_command(self, mcp):
+        response = mcp._process_command({"type": "fake_command"})
+        assert response["status"] == "error"
+        assert "Unknown command" in response["message"]
+
+    def test_missing_type(self, mcp):
+        response = mcp._process_command({})
+        assert response["status"] == "error"

@@ -31,6 +31,11 @@ packages = ["MCP_Server", "elevenlabs_mcp", "AbletonMCP_Remote_Script"]
 [tool.setuptools.package-data]
 AbletonMCP_Remote_Script = ["*.py"]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
 [project.urls]
 "Homepage" = "https://github.com/androidStern/easy-ableton-mcp"
 "Bug Tracker" = "https://github.com/androidStern/easy-ableton-mcp/issues"

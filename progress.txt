@@ -1,0 +1,87 @@
+# Device Parameter Control - Session Progress
+
+## COMPLETED: CODE_REVIEW.md Issue #1 - Bare except clauses
+
+### Fixes applied:
+- Line 88: `except:` → `except Exception:` (socket cleanup in disconnect)
+- Line 197: `except:` → `except Exception as e:` + added logging (send error response)
+- Line 205: `except:` → `except Exception:` (client close in finally)
+- Line 985: Rewrote `_get_device_type()` to use the Live API `device.type` property instead of
+  string-matching heuristics. Removed try/except entirely - errors now propagate.
+  - device.type: 0=undefined, 1=instrument, 2=audio_effect, 4=midi_effect
+  - Also checks can_have_drum_pads/can_have_chains for rack subtypes
+
+### Decisions made:
+- Cases 1, 3 (cleanup): Catch Exception, suppress errors - cleanup failures shouldn't block shutdown
+- Case 2 (send error): Catch Exception, log the error, then break - boundary case
+- Case 4 (device type): Rewrote to use proper API, no exception handling needed
+
+---
+
+## Completed
+1. Device parameter tools implemented in MCP_Server/server.py and AbletonMCP_Remote_Script/__init__.py
+2. Created scripts/dev-refresh.sh - restarts Ableton, runs install, waits for port 9877
+3. Created scripts/test_mcp_tools.py - automated MCP tool tests
+4. Fixed osascript permission error by using pgrep/open instead of System Events
+   - Changed _is_ableton_running_macos() to use pgrep (no permissions needed)
+   - Changed _launch_ableton_macos() to use `open -b` (no permissions needed)
+   - Kept graceful quit via osascript (uses bundle ID, not System Events)
+5. Updated dev-refresh.sh to run `uv run` install (points symlink to repo, not uv cache)
+6. Created test fixture at tests/fixtures/test_session Project/test_session.als
+   - Track 0 "Test-Synth": MIDI track with Drift synth + "Test Pattern" clip
+   - Track 2 "Test-EQ": Audio track with EQ Eight effect
+   - Tempo: 128 BPM
+7. Updated dev-refresh.sh to open test fixture project automatically
+8. Increased TCP wait timeout to 90s (Ableton + project loading can be slow)
+
+## Test Results (All Passing)
+- get_session_info: PASS (Tempo: 128 BPM, 4 tracks)
+- get_device_parameters: PASS (Drift synth, 66 parameters)
+- set_device_parameter: PASS (LP Freq = 0.5)
+- batch_set_device_parameters: PASS (updated parameters)
+
+## Usage
+```bash
+# Full dev cycle: restart Ableton with fixture, run tests
+./scripts/dev-refresh.sh --test
+
+# Just restart Ableton with fixture
+./scripts/dev-refresh.sh
+
+# Launch MCP Inspector for interactive testing
+./scripts/dev-refresh.sh --inspector
+```
+
+---
+
+## IN PROGRESS: CODE_REVIEW.md Issue #2 - Monolithic _process_command()
+
+### Problem
+`_process_command()` is 149 lines with 25+ elif branches and duplicated dispatch logic.
+
+### Solution Chosen
+Decorator-based command registry (Flask/FastAPI pattern). Evaluated via 4 background agents:
+- 3/4 recommended structured dispatch over if-elif
+- Decorator registry chosen for colocation + TypeScript portability
+
+### Work Completed
+1. **Test suite created** - `tests/test_command_dispatch.py` + `tests/conftest.py`
+   - 42 tests passing in 0.11s
+   - Covers all 19 commands (6 direct, 13 main-thread)
+   - Tests queue timeout behavior and error propagation
+   - Mocks only at Ableton API boundary (_song, application, ControlSurface)
+
+2. **Refactor plan written** - `REFACTOR_PLAN.md`
+   - CommandRegistry class design
+   - Handler signature updates (add defaults)
+   - _execute_on_main_thread() extraction
+   - Simplified _process_command() implementation
+   - Migration checklist
+
+### Next Steps
+1. Add CommandRegistry class at module level
+2. Add _execute_on_main_thread() method
+3. Update handler signatures with defaults
+4. Add @commands.register() decorators
+5. Replace _process_command() with simplified version
+6. Run tests - verify 42 pass
