@@ -5,7 +5,8 @@ import json
 import logging
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Any, List, Union
+from functools import wraps
+from typing import AsyncIterator, Dict, Any, List, Union, Callable, Optional
 
 from .protocol import send_message, recv_message
 from .ableton_process import ensure_ableton_running, AbletonTCPNotReadyError, AbletonLaunchError
@@ -176,20 +177,63 @@ def get_ableton_connection():
     raise RuntimeError("Could not connect to Ableton. Make sure the Remote Script is running.")
 
 
+def ableton_command(
+    command: str,
+    format_result: Optional[Callable[[dict], str]] = None,
+    error_context: Optional[str] = None
+):
+    """Decorator that wraps an MCP tool with Ableton connection and error handling.
+
+    The decorated function should return a params dict (or None for no params).
+    The decorator handles: connection, send_command, error logging, and response formatting.
+
+    Args:
+        command: The Ableton command name to send
+        format_result: Optional function to format the result. If None, returns JSON.
+        error_context: Optional context string for error messages. Defaults to command name.
+    """
+    def decorator(fn: Callable) -> Callable:
+        @wraps(fn)
+        def wrapper(*args, **kwargs) -> str:
+            ctx_name = error_context or command.replace("_", " ")
+            try:
+                ableton = get_ableton_connection()
+                params = fn(*args, **kwargs)
+                result = ableton.send_command(command, params)
+                if format_result:
+                    return format_result(result, params)
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error {ctx_name}: {str(e)}")
+                return f"Error {ctx_name}: {str(e)}"
+        return wrapper
+    return decorator
+
+
+# Result formatters for tools that don't return JSON
+def _format_message(msg: str) -> Callable[[dict, dict], str]:
+    """Create a formatter that returns a fixed message."""
+    return lambda result, params: msg
+
+
+def _format_template(template: str) -> Callable[[dict, dict], str]:
+    """Create a formatter using a template with result and params access."""
+    def formatter(result: dict, params: dict) -> str:
+        return template.format(result=result, params=params, **result, **(params or {}))
+    return formatter
+
+
 # Core Tool endpoints
 
 @mcp.tool()
+@ableton_command("get_session_info")
 def get_session_info(ctx: Context) -> str:
     """Get detailed information about the current Ableton session"""
-    try:
-        ableton = get_ableton_connection()
-        result = ableton.send_command("get_session_info")
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting session info from Ableton: {str(e)}")
-        return f"Error getting session info: {str(e)}"
+    return None
+
 
 @mcp.tool()
+@ableton_command("get_session_tree")
 def get_session_tree(ctx: Context) -> str:
     """Get a compact tree view of the entire Ableton session.
 
@@ -197,243 +241,177 @@ def get_session_tree(ctx: Context) -> str:
     return tracks, and scenes in a single call. Use this to understand
     the full session structure before making changes.
     """
-    try:
-        ableton = get_ableton_connection()
-        result = ableton.send_command("get_session_tree")
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting session tree from Ableton: {str(e)}")
-        return f"Error getting session tree: {str(e)}"
+    return None
+
 
 @mcp.tool()
+@ableton_command("get_track_info")
 def get_track_info(ctx: Context, track_index: int) -> str:
     """
     Get detailed information about a specific track in Ableton.
-    
+
     Parameters:
     - track_index: The index of the track to get information about
     """
-    try:
-        ableton = get_ableton_connection()
-        result = ableton.send_command("get_track_info", {"track_index": track_index})
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting track info from Ableton: {str(e)}")
-        return f"Error getting track info: {str(e)}"
+    return {"track_index": track_index}
 
 @mcp.tool()
+@ableton_command("create_midi_track",
+                 format_result=lambda r, p: f"Created new MIDI track: {r.get('name', 'unknown')}")
 def create_midi_track(ctx: Context, index: int = -1) -> str:
     """
     Create a new MIDI track in the Ableton session.
-    
+
     Parameters:
     - index: The index to insert the track at (-1 = end of list)
     """
-    try:
-        ableton = get_ableton_connection()
-        result = ableton.send_command("create_midi_track", {"index": index})
-        return f"Created new MIDI track: {result.get('name', 'unknown')}"
-    except Exception as e:
-        logger.error(f"Error creating MIDI track: {str(e)}")
-        return f"Error creating MIDI track: {str(e)}"
+    return {"index": index}
 
 
 @mcp.tool()
+@ableton_command("set_track_name",
+                 format_result=lambda r, p: f"Renamed track to: {r.get('name', p.get('name'))}")
 def set_track_name(ctx: Context, track_index: int, name: str) -> str:
     """
     Set the name of a track.
-    
+
     Parameters:
     - track_index: The index of the track to rename
     - name: The new name for the track
     """
-    try:
-        ableton = get_ableton_connection()
-        result = ableton.send_command("set_track_name", {"track_index": track_index, "name": name})
-        return f"Renamed track to: {result.get('name', name)}"
-    except Exception as e:
-        logger.error(f"Error setting track name: {str(e)}")
-        return f"Error setting track name: {str(e)}"
+    return {"track_index": track_index, "name": name}
+
 
 @mcp.tool()
+@ableton_command("create_clip",
+                 format_result=lambda r, p: f"Created new clip at track {p['track_index']}, slot {p['clip_index']} with length {p['length']} beats")
 def create_clip(ctx: Context, track_index: int, clip_index: int, length: float = 4.0) -> str:
     """
     Create a new MIDI clip in the specified track and clip slot.
-    
+
     Parameters:
     - track_index: The index of the track to create the clip in
     - clip_index: The index of the clip slot to create the clip in
     - length: The length of the clip in beats (default: 4.0)
     """
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("create_clip", {
-            "track_index": track_index,
-            "clip_index": clip_index,
-            "length": length
-        })
-        return f"Created new clip at track {track_index}, slot {clip_index} with length {length} beats"
-    except Exception as e:
-        logger.error(f"Error creating clip: {str(e)}")
-        return f"Error creating clip: {str(e)}"
+    return {"track_index": track_index, "clip_index": clip_index, "length": length}
+
 
 @mcp.tool()
+@ableton_command("add_notes_to_clip",
+                 format_result=lambda r, p: f"Added {len(p.get('notes', []))} notes to clip at track {p['track_index']}, slot {p['clip_index']}")
 def add_notes_to_clip(
-    ctx: Context, 
-    track_index: int, 
-    clip_index: int, 
+    ctx: Context,
+    track_index: int,
+    clip_index: int,
     notes: List[Dict[str, Union[int, float, bool]]]
 ) -> str:
     """
     Add MIDI notes to a clip.
-    
+
     Parameters:
     - track_index: The index of the track containing the clip
     - clip_index: The index of the clip slot containing the clip
     - notes: List of note dictionaries, each with pitch, start_time, duration, velocity, and mute
     """
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("add_notes_to_clip", {
-            "track_index": track_index,
-            "clip_index": clip_index,
-            "notes": notes
-        })
-        return f"Added {len(notes)} notes to clip at track {track_index}, slot {clip_index}"
-    except Exception as e:
-        logger.error(f"Error adding notes to clip: {str(e)}")
-        return f"Error adding notes to clip: {str(e)}"
+    return {"track_index": track_index, "clip_index": clip_index, "notes": notes}
+
 
 @mcp.tool()
+@ableton_command("set_clip_name",
+                 format_result=lambda r, p: f"Renamed clip at track {p['track_index']}, slot {p['clip_index']} to '{p['name']}'")
 def set_clip_name(ctx: Context, track_index: int, clip_index: int, name: str) -> str:
     """
     Set the name of a clip.
-    
+
     Parameters:
     - track_index: The index of the track containing the clip
     - clip_index: The index of the clip slot containing the clip
     - name: The new name for the clip
     """
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("set_clip_name", {
-            "track_index": track_index,
-            "clip_index": clip_index,
-            "name": name
-        })
-        return f"Renamed clip at track {track_index}, slot {clip_index} to '{name}'"
-    except Exception as e:
-        logger.error(f"Error setting clip name: {str(e)}")
-        return f"Error setting clip name: {str(e)}"
+    return {"track_index": track_index, "clip_index": clip_index, "name": name}
+
 
 @mcp.tool()
+@ableton_command("set_tempo",
+                 format_result=lambda r, p: f"Set tempo to {p['tempo']} BPM")
 def set_tempo(ctx: Context, tempo: float) -> str:
     """
     Set the tempo of the Ableton session.
-    
+
     Parameters:
     - tempo: The new tempo in BPM
     """
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("set_tempo", {"tempo": tempo})
-        return f"Set tempo to {tempo} BPM"
-    except Exception as e:
-        logger.error(f"Error setting tempo: {str(e)}")
-        return f"Error setting tempo: {str(e)}"
+    return {"tempo": tempo}
+
+
+def _format_load_instrument(result: dict, params: dict) -> str:
+    """Format result for load_instrument_or_effect."""
+    uri = params.get("item_uri")
+    track_index = params.get("track_index")
+    if result.get("loaded", False):
+        new_devices = result.get("new_devices", [])
+        if new_devices:
+            return f"Loaded instrument with URI '{uri}' on track {track_index}. New devices: {', '.join(new_devices)}"
+        devices = result.get("devices_after", [])
+        return f"Loaded instrument with URI '{uri}' on track {track_index}. Devices on track: {', '.join(devices)}"
+    return f"Failed to load instrument with URI '{uri}'"
 
 
 @mcp.tool()
+@ableton_command("load_browser_item", format_result=_format_load_instrument,
+                 error_context="loading instrument by URI")
 def load_instrument_or_effect(ctx: Context, track_index: int, uri: str) -> str:
     """
     Load an instrument or effect onto a track using its URI.
-    
+
     Parameters:
     - track_index: The index of the track to load the instrument on
     - uri: The URI of the instrument or effect to load (e.g., 'query:Synths#Instrument%20Rack:Bass:FileId_5116')
     """
-    try:
-        ableton = get_ableton_connection()
-        result = ableton.send_command("load_browser_item", {
-            "track_index": track_index,
-            "item_uri": uri
-        })
-        
-        # Check if the instrument was loaded successfully
-        if result.get("loaded", False):
-            new_devices = result.get("new_devices", [])
-            if new_devices:
-                return f"Loaded instrument with URI '{uri}' on track {track_index}. New devices: {', '.join(new_devices)}"
-            else:
-                devices = result.get("devices_after", [])
-                return f"Loaded instrument with URI '{uri}' on track {track_index}. Devices on track: {', '.join(devices)}"
-        else:
-            return f"Failed to load instrument with URI '{uri}'"
-    except Exception as e:
-        logger.error(f"Error loading instrument by URI: {str(e)}")
-        return f"Error loading instrument by URI: {str(e)}"
+    return {"track_index": track_index, "item_uri": uri}
+
 
 @mcp.tool()
+@ableton_command("fire_clip",
+                 format_result=lambda r, p: f"Started playing clip at track {p['track_index']}, slot {p['clip_index']}")
 def fire_clip(ctx: Context, track_index: int, clip_index: int) -> str:
     """
     Start playing a clip.
-    
+
     Parameters:
     - track_index: The index of the track containing the clip
     - clip_index: The index of the clip slot containing the clip
     """
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("fire_clip", {
-            "track_index": track_index,
-            "clip_index": clip_index
-        })
-        return f"Started playing clip at track {track_index}, slot {clip_index}"
-    except Exception as e:
-        logger.error(f"Error firing clip: {str(e)}")
-        return f"Error firing clip: {str(e)}"
+    return {"track_index": track_index, "clip_index": clip_index}
+
 
 @mcp.tool()
+@ableton_command("stop_clip",
+                 format_result=lambda r, p: f"Stopped clip at track {p['track_index']}, slot {p['clip_index']}")
 def stop_clip(ctx: Context, track_index: int, clip_index: int) -> str:
     """
     Stop playing a clip.
-    
+
     Parameters:
     - track_index: The index of the track containing the clip
     - clip_index: The index of the clip slot containing the clip
     """
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("stop_clip", {
-            "track_index": track_index,
-            "clip_index": clip_index
-        })
-        return f"Stopped clip at track {track_index}, slot {clip_index}"
-    except Exception as e:
-        logger.error(f"Error stopping clip: {str(e)}")
-        return f"Error stopping clip: {str(e)}"
+    return {"track_index": track_index, "clip_index": clip_index}
+
 
 @mcp.tool()
+@ableton_command("start_playback", format_result=lambda r, p: "Started playback")
 def start_playback(ctx: Context) -> str:
     """Start playing the Ableton session."""
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("start_playback")
-        return "Started playback"
-    except Exception as e:
-        logger.error(f"Error starting playback: {str(e)}")
-        return f"Error starting playback: {str(e)}"
+    return None
+
 
 @mcp.tool()
+@ableton_command("stop_playback", format_result=lambda r, p: "Stopped playback")
 def stop_playback(ctx: Context) -> str:
     """Stop playing the Ableton session."""
-    try:
-        ableton = get_ableton_connection()
-        ableton.send_command("stop_playback")
-        return "Stopped playback"
-    except Exception as e:
-        logger.error(f"Error stopping playback: {str(e)}")
-        return f"Error stopping playback: {str(e)}"
+    return None
 
 @mcp.tool()
 def get_browser_tree(ctx: Context, category_type: str = "all") -> str:
@@ -587,6 +565,71 @@ def load_drum_kit(ctx: Context, track_index: int, rack_uri: str, kit_path: str) 
     except Exception as e:
         logger.error(f"Error loading drum kit: {str(e)}")
         return f"Error loading drum kit: {str(e)}"
+
+@mcp.tool()
+@ableton_command("get_device_parameters")
+def get_device_parameters(ctx: Context, track_index: int, device_index: int,
+                          device_path: List[int] = None) -> str:
+    """
+    Get all parameters for a device.
+
+    Parameters:
+    - track_index: The index of the track containing the device
+    - device_index: The index of the device on the track
+    - device_path: Optional path for nested devices in racks.
+                   Format: [chain_idx, device_idx, ...] for instrument/effect racks
+                   Use negative values for drum pad notes (e.g., -36 for C1)
+                   Example: [0, 0] = chain 0, device 0
+                   Example: [-36, 0] = drum pad C1, device 0
+    """
+    return {"track_index": track_index, "device_index": device_index, "device_path": device_path}
+
+
+@mcp.tool()
+@ableton_command("set_device_parameter")
+def set_device_parameter(ctx: Context, track_index: int, device_index: int,
+                         parameter_index: int, value: float,
+                         device_path: List[int] = None) -> str:
+    """
+    Set a device parameter to a normalized value (0.0-1.0).
+
+    Parameters:
+    - track_index: The index of the track containing the device
+    - device_index: The index of the device on the track
+    - parameter_index: The index of the parameter to set
+    - value: Normalized value between 0.0 and 1.0
+    - device_path: Optional path for nested devices in racks (see get_device_parameters)
+    """
+    return {
+        "track_index": track_index,
+        "device_index": device_index,
+        "parameter_index": parameter_index,
+        "value": value,
+        "device_path": device_path
+    }
+
+
+@mcp.tool()
+@ableton_command("batch_set_device_parameters")
+def batch_set_device_parameters(ctx: Context, track_index: int, device_index: int,
+                                parameters: List[Dict[str, Union[int, float]]],
+                                device_path: List[int] = None) -> str:
+    """
+    Set multiple device parameters atomically.
+
+    Parameters:
+    - track_index: The index of the track containing the device
+    - device_index: The index of the device on the track
+    - parameters: List of parameter updates, each with "index" and "value" keys
+                  Example: [{"index": 1, "value": 0.5}, {"index": 2, "value": 0.8}]
+    - device_path: Optional path for nested devices in racks (see get_device_parameters)
+    """
+    return {
+        "track_index": track_index,
+        "device_index": device_index,
+        "parameters": parameters,
+        "device_path": device_path
+    }
 
 # Main execution
 def main():

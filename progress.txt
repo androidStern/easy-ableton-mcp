@@ -104,3 +104,64 @@ Ran `./scripts/dev-refresh.sh --test` with real Ableton:
 - get_device_parameters: PASS (Drift synth, 66 parameters)
 - set_device_parameter: PASS (LP Freq = 0.5)
 - batch_set_device_parameters: PASS (updated parameters)
+
+---
+
+## COMPLETED: CODE_REVIEW.md Issue #3 - Repetitive Tool Wrappers
+
+### Problem
+21 MCP tool functions in server.py with identical boilerplate:
+- get_ableton_connection()
+- send_command()
+- try/except with logger.error()
+
+### Solution
+Added `@ableton_command()` decorator that handles connection, command dispatch, and error handling.
+
+### Changes Made
+1. **Added `ableton_command` decorator** (lines 178-210)
+   - Takes command name, optional format_result function, optional error_context
+   - Wrapped function returns params dict (or None)
+   - Decorator handles try/except, logging, JSON formatting
+
+2. **Refactored 17 tools** to use decorator:
+   - get_session_info, get_session_tree, get_track_info
+   - create_midi_track, set_track_name, create_clip
+   - add_notes_to_clip, set_clip_name, set_tempo
+   - load_instrument_or_effect, fire_clip, stop_clip
+   - start_playback, stop_playback
+   - get_device_parameters, set_device_parameter, batch_set_device_parameters
+
+3. **Kept 3 tools as-is** (complex logic, separate issues):
+   - get_browser_tree (custom formatting + error handling → Issue #12)
+   - get_browser_items_at_path (custom error handling → Issue #12)
+   - load_drum_kit (multi-step operation → Issue #15)
+
+### Test Results
+- 42 unit tests passing
+- Live MCP tests passing (get_session_info, device parameter tools)
+
+---
+
+## COMPLETED: Crash Recovery Dialog Fix
+
+### Problem
+When dev-refresh.sh force-killed Ableton, a crash recovery dialog appeared requiring
+manual intervention before tests could proceed.
+
+### Root Cause
+Bash glob `Live*` doesn't match paths with spaces like `Live 11.3.43`. The rm commands
+were failing silently and not deleting the crash recovery files.
+
+### Solution
+Replaced glob-based rm with find commands that properly handle paths with spaces:
+```bash
+find ~/Library/Preferences/Ableton -maxdepth 2 -name "Crash" -type d -exec rm -rf {} +
+find ~/Library/Preferences/Ableton -maxdepth 2 -name "CrashRecoveryInfo.cfg" -delete
+find ~/Library/Preferences/Ableton -maxdepth 2 -name "CrashDetection.cfg" -delete
+find ~/Library/Preferences/Ableton -maxdepth 2 -name "Undo" -type d -exec rm -rf {} +
+```
+
+### Test Results
+- E2E tests now run without any manual intervention
+- Full dev-refresh.sh --test cycle completes automatically
